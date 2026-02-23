@@ -241,6 +241,7 @@ const Home = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
 
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
