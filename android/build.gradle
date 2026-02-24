@@ -1,0 +1,79 @@
+// Top-level build file
+
+buildscript {
+    ext {
+        buildToolsVersion = "34.0.0"
+        minSdkVersion = 21
+        compileSdkVersion = 34
+        targetSdkVersion = 34
+        kotlinVersion = "1.7.20"
+
+        if (System.properties['os.arch'] == "aarch64") {
+            ndkVersion = "24.0.8215888"
+        } else {
+            ndkVersion = "21.4.7075529"
+        }
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:7.4.2")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("de.undercouch:gradle-download-task:5.0.1")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+    }
+}
+
+ext {
+    ffmpegKitPackage = "full-gpl-lts"
+    set("ffmpegKit.android.lts.version", "6.0-2")
+    set("ffmpegKit.android.main.version", "6.0-2")
+}
+
+allprojects {
+    repositories {
+        // Prioriza Maven Central y añade mirrors
+        mavenCentral()
+        maven { url 'https://repo.maven.apache.org/maven2' }
+        maven { url 'https://maven-central.storage-download.googleapis.com/maven2' }
+        google()
+
+        // Repos de React Native
+        maven { url("$rootDir/../node_modules/react-native/android") }
+        maven { url("$rootDir/../node_modules/jsc-android/dist") }
+        maven { url "https://www.jitpack.io" }
+    }
+}
+
+subprojects {
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "1.8"
+        }
+    }
+}
+
+// Fuerza la versión LTS de FFmpegKit a nivel de build
+configurations.all {
+    resolutionStrategy {
+        force "com.arthenica:ffmpeg-kit-full-gpl:6.0-2.LTS"
+        // Pin Media3 to a compileSdk 34 compatible version
+        force "androidx.media3:media3-common:1.2.1"
+        force "androidx.media3:media3-container:1.2.1"
+        force "androidx.media3:media3-database:1.2.1"
+        force "androidx.media3:media3-datasource:1.2.1"
+        force "androidx.media3:media3-datasource-okhttp:1.2.1"
+        force "androidx.media3:media3-decoder:1.2.1"
+        force "androidx.media3:media3-exoplayer:1.2.1"
+        force "androidx.media3:media3-exoplayer-hls:1.2.1"
+        force "androidx.media3:media3-exoplayer-dash:1.2.1"
+        force "androidx.media3:media3-exoplayer-smoothstreaming:1.2.1"
+        force "androidx.media3:media3-extractor:1.2.1"
+        force "androidx.media3:media3-session:1.2.1"
+        force "androidx.media3:media3-ui:1.2.1"
+    }
+}
