@@ -11,6 +11,7 @@ import {
   Image,
   StatusBar,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
@@ -171,7 +172,7 @@ const Home = ({ navigation, route }) => {
     : 'Crea tu primer ingreso para empezar'
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
 
       <View style={styles.bgOrbLeft} />
@@ -321,7 +322,7 @@ const Home = ({ navigation, route }) => {
           <Text style={styles.navText}>PROCESO</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   )
 }
 
@@ -399,7 +400,7 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    paddingTop: 48,
+    paddingTop: 12,
     paddingHorizontal: 20,
     paddingBottom: 10,
   },
