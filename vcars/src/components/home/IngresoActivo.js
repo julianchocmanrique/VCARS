@@ -27,11 +27,6 @@ const PROCESS_STEPS = [
   'Entrega del vehiculo',
 ]
 
-const DEMO_AUTOS = [
-  { placa: 'ABC123', cliente: 'Juan Perez', paso: 'Diagnostico tecnico' },
-  { placa: 'JHK456', cliente: 'Maria Gomez', paso: 'Cotizacion' },
-  { placa: 'XYZ789', cliente: 'Carlos Diaz', paso: 'Entrega del vehiculo' },
-]
 
 const COLORS = {
   bg: '#05070B',
@@ -111,161 +106,12 @@ const IngresoActivo = ({ navigation }) => {
     if (saved) {
       const parsed = JSON.parse(saved)
       if (Array.isArray(parsed)) {
-        const hasDemo = parsed.some((item) => String(item.id || '').startsWith('demo-'))
-        if (!hasDemo) {
-          const now = Date.now()
-          const demoEntries = [
-            { id: 'demo-1', placa: 'KQM497', cliente: 'Laura Medina', telefono: '3001234567', vehiculo: 'Mazda 3', fecha: new Date(now - 86400000 * 1).toISOString() },
-            { id: 'demo-2', placa: 'BTR825', cliente: 'Andres Rojas', telefono: '3015558899', vehiculo: 'Renault Duster', fecha: new Date(now - 86400000 * 2).toISOString() },
-            { id: 'demo-3', placa: 'GHT214', cliente: 'Sofia Cruz', telefono: '3027784411', vehiculo: 'Chevrolet Onix', fecha: new Date(now - 86400000 * 3).toISOString() },
-            { id: 'demo-4', placa: 'LPD902', cliente: 'Carlos Velez', telefono: '3009872211', vehiculo: 'Kia Rio', fecha: new Date(now - 86400000 * 4).toISOString() },
-            { id: 'demo-5', placa: 'ZXR671', cliente: 'Marta Salazar', telefono: '3116643322', vehiculo: 'Toyota Corolla', fecha: new Date(now - 86400000 * 5).toISOString() },
-          ].map((item) => ({
-            ...item,
-            paso: 'Entrega del vehiculo',
-            stepIndex: 5,
-          }))
-
-          const formsMap = {
-            'demo-1': buildDemoForm(demoEntries[0], {
-              ordenNo: 'OS-1001',
-              cotizacionNumero: 'COT-2001',
-            }),
-            'demo-2': buildDemoForm(demoEntries[1], {
-              ordenNo: 'OS-1002',
-              cotizacionNumero: 'COT-2002',
-            }),
-            'demo-3': buildDemoForm(demoEntries[2], {
-              ordenNo: 'OS-1003',
-              cotizacionNumero: 'COT-2003',
-            }),
-            'demo-4': buildDemoForm(demoEntries[3], {
-              ordenNo: 'OS-1004',
-              cotizacionNumero: 'COT-2004',
-            }),
-            'demo-5': buildDemoForm(demoEntries[4], {
-              ordenNo: 'OS-1005',
-              cotizacionNumero: 'COT-2005',
-            }),
-          }
-
-          const nextList = [...demoEntries, ...parsed]
-          await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(nextList))
-          await AsyncStorage.setItem(STORAGE_MAP_KEY, JSON.stringify({ ...(savedMap || {}), ...formsMap }))
-          setEntries(nextList)
-          return
-        }
         setEntries(parsed)
         return
       }
     }
-    const now = Date.now()
-    const seedEntries = [
-      { id: 'demo-1', placa: 'KQM497', cliente: 'Laura Medina', telefono: '3001234567', vehiculo: 'Mazda 3', fecha: new Date(now - 86400000 * 1).toISOString() },
-      { id: 'demo-2', placa: 'BTR825', cliente: 'Andres Rojas', telefono: '3015558899', vehiculo: 'Renault Duster', fecha: new Date(now - 86400000 * 2).toISOString() },
-      { id: 'demo-3', placa: 'GHT214', cliente: 'Sofia Cruz', telefono: '3027784411', vehiculo: 'Chevrolet Onix', fecha: new Date(now - 86400000 * 3).toISOString() },
-      { id: 'demo-4', placa: 'LPD902', cliente: 'Carlos Velez', telefono: '3009872211', vehiculo: 'Kia Rio', fecha: new Date(now - 86400000 * 4).toISOString() },
-      { id: 'demo-5', placa: 'ZXR671', cliente: 'Marta Salazar', telefono: '3116643322', vehiculo: 'Toyota Corolla', fecha: new Date(now - 86400000 * 5).toISOString() },
-    ].map((item) => ({
-      ...item,
-      paso: 'Entrega del vehiculo',
-      stepIndex: 5,
-    }))
-
-    const formsMap = {
-      'demo-1': buildDemoForm(seedEntries[0], {
-        ordenNo: 'OS-1001',
-        cotizacionNumero: 'COT-2001',
-      }),
-      'demo-2': buildDemoForm(seedEntries[1], {
-        ordenNo: 'OS-1002',
-        cotizacionNumero: 'COT-2002',
-      }),
-      'demo-3': buildDemoForm(seedEntries[2], {
-        ordenNo: 'OS-1003',
-        cotizacionNumero: 'COT-2003',
-      }),
-      'demo-4': buildDemoForm(seedEntries[3], {
-        ordenNo: 'OS-1004',
-        cotizacionNumero: 'COT-2004',
-      }),
-      'demo-5': buildDemoForm(seedEntries[4], {
-        ordenNo: 'OS-1005',
-        cotizacionNumero: 'COT-2005',
-      }),
-    }
-
-    await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(seedEntries))
-    await AsyncStorage.setItem(STORAGE_MAP_KEY, JSON.stringify(formsMap))
-    setEntries(seedEntries)
+    setEntries([])
   }, [])
-
-  const buildDemoForm = (entry, extras) => {
-    const today = new Date()
-    const formatDate = (offset) => {
-      const d = new Date(today.getTime() + offset * 86400000)
-      const yyyy = d.getFullYear()
-      const mm = String(d.getMonth() + 1).padStart(2, '0')
-      const dd = String(d.getDate()).padStart(2, '0')
-      return `${yyyy}-${mm}-${dd}`
-    }
-    return {
-      form: {
-        ordenNo: extras.ordenNo,
-        fechaEntrada: formatDate(-7),
-        fechaEntrega: formatDate(-3),
-        propietario: entry.cliente,
-        nit: '123456789',
-        telefono: entry.telefono,
-        email: 'cliente@correo.com',
-        facturaNombre: entry.cliente,
-        formaPago: 'Transferencia',
-        bancoTransferencia: 'Nequi',
-        pagoDias: '',
-        placa: entry.placa,
-        marca: entry.vehiculo,
-        modelo: '2020',
-        color: 'Gris',
-        empresa: 'Particular',
-        direccion: 'Calle 10 # 20-30',
-        soatFV: formatDate(120),
-        rtmFV: formatDate(240),
-        kilometraje: '56.800',
-        combustible: '50%',
-        fallaCliente: 'Ruido en el motor y vibracion',
-        observaciones: 'Sin accesorios adicionales',
-        inventario: {},
-        inventarioNotas: 'Todo completo',
-        condicionFisica: 'Rayones leves en defensa',
-        fotosVehiculo: [],
-        cotizacionNumero: extras.cotizacionNumero,
-        cotizacionCondiciones: 'Pago inmediato por transferencia.',
-        cotizacionItems: [
-          { sistema: 'Motor', trabajo: 'Cambio soportes', precio: '1.020.000', cantidad: '1', total: '1.020.000' },
-          { sistema: 'Motor', trabajo: 'Filtro de aire', precio: '323.000', cantidad: '1', total: '323.000' },
-        ],
-        cotizacionSubtotal: '1.343.000',
-        cotizacionIva: '255.170',
-        cotizacionTotal: '1.598.170',
-        cotizacionFecha: formatDate(-5),
-        cotizacionObservaciones: 'Valida 5 dias',
-        tecnico: 'Juan Taller',
-        conservarPiezas: 'No',
-        aprobadoCliente: 'Si',
-        medioAprobacion: 'WhatsApp',
-        firmaAutoriza: entry.cliente,
-        fechaAutoriza: formatDate(-4),
-        trabajoRealizado: 'Cambio soportes y mantenimiento',
-        piezasCambiadas: 'Soportes motor, filtro aire',
-        observacionesEntrega: 'Vehiculo entregado sin novedades',
-        fechaEntregaReal: formatDate(-1),
-        firmaRecibe: entry.cliente,
-        fechaRecibe: formatDate(-1),
-      },
-      step: 5,
-      completed: [0, 1, 2, 3, 4, 5],
-    }
-  }
 
   useFocusEffect(
     React.useCallback(() => {

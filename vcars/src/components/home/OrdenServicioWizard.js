@@ -20,6 +20,7 @@ const STORAGE_MAP_KEY = '@vcars_orden_servicio_map'
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const ENTRIES_KEY = '@vcars_entries'
 const PROFILE_KEY = '@vcars_profile'
+const ORDER_COUNTER_KEY = '@vcars_order_counter'
 
 const COLORS = {
   bg: '#05070B',
@@ -244,6 +245,15 @@ const OrdenServicioWizard = ({ navigation, route }) => {
         if (!next.modelo && currentEntry.vehiculo) next.modelo = currentEntry.vehiculo
         return next
       }
+      const ensureOrderNo = async (draft) => {
+        if (draft.ordenNo && String(draft.ordenNo).trim()) return draft
+        const raw = await AsyncStorage.getItem(ORDER_COUNTER_KEY)
+        let counter = parseInt(raw || '', 10)
+        if (!counter || Number.isNaN(counter)) counter = 1001
+        const ordenNo = `OS-${counter}`
+        await AsyncStorage.setItem(ORDER_COUNTER_KEY, String(counter + 1))
+        return { ...draft, ordenNo }
+      }
       const routeStepRaw = route?.params?.startStep
       const routeStep =
         typeof routeStepRaw === 'number'
@@ -268,7 +278,8 @@ const OrdenServicioWizard = ({ navigation, route }) => {
               ? savedForm.cotizacionItems
               : emptyForm.cotizacionItems,
           }
-          setForm(applyEntry(mergedForm))
+          const withOrder = await ensureOrderNo(applyEntry(mergedForm))
+          setForm(withOrder)
           setCompleted(savedCompleted)
           const nextStep = routeStep !== null ? routeStep : savedStep
           if (nextStep >= 0 && nextStep < steps.length) setStep(nextStep)
@@ -293,12 +304,14 @@ const OrdenServicioWizard = ({ navigation, route }) => {
                 ? savedForm.fotosVehiculo
                 : [],
             }
-            setForm(applyEntry(mergedForm))
+            const withOrder = await ensureOrderNo(applyEntry(mergedForm))
+            setForm(withOrder)
             setCompleted(savedCompleted)
             const nextStep = routeStep !== null ? routeStep : savedStep
             if (nextStep >= 0 && nextStep < steps.length) setStep(nextStep)
           } else {
-            setForm(applyEntry({ ...emptyForm }))
+            const withOrder = await ensureOrderNo(applyEntry({ ...emptyForm }))
+            setForm(withOrder)
             setCompleted([])
             if (routeStep !== null && routeStep >= 0 && routeStep < steps.length) {
               setStep(routeStep)
@@ -308,7 +321,8 @@ const OrdenServicioWizard = ({ navigation, route }) => {
           setForm(emptyForm)
         }
       } else {
-        setForm(applyEntry({ ...emptyForm }))
+        const withOrder = await ensureOrderNo(applyEntry({ ...emptyForm }))
+        setForm(withOrder)
         if (routeStep !== null && routeStep >= 0 && routeStep < steps.length) {
           setStep(routeStep)
         }
@@ -739,7 +753,14 @@ const OrdenServicioWizard = ({ navigation, route }) => {
           <View style={styles.stack}>
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Orden de servicio</Text>
-              <Field label="Orden No." value={form.ordenNo} onChange={(v) => setField('ordenNo', v)} error={errors.ordenNo} />
+              <Field
+                label="Orden No."
+                value={form.ordenNo}
+                onChange={() => {}}
+                error={errors.ordenNo}
+                editable={false}
+                fixed
+              />
               <DateField label="Fecha entrada" value={form.fechaEntrada} onPress={() => openDate('fechaEntrada')} error={errors.fechaEntrada} />
               <DateField label="Fecha prevista entrega" value={form.fechaEntrega} onPress={() => openDate('fechaEntrega')} error={errors.fechaEntrega} />
             </View>
@@ -1082,11 +1103,17 @@ const OrdenServicioWizard = ({ navigation, route }) => {
   )
 }
 
-const Field = ({ label, value, onChange, multiline, keyboard, error, editable = true }) => (
+const Field = ({ label, value, onChange, multiline, keyboard, error, editable = true, fixed = false }) => (
   <View style={styles.field}>
     <Text style={styles.label}>{label}</Text>
     <TextInput
-      style={[styles.input, multiline && styles.inputMultiline, error && styles.inputError, !editable && styles.inputDisabled]}
+      style={[
+        styles.input,
+        multiline && styles.inputMultiline,
+        error && styles.inputError,
+        !editable && styles.inputDisabled,
+        fixed && styles.inputFixed,
+      ]}
       value={value}
       onChangeText={onChange}
       multiline={multiline}
@@ -1281,6 +1308,10 @@ const styles = StyleSheet.create({
   },
   inputDisabled: {
     opacity: 0.7,
+  },
+  inputFixed: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
   },
   dateInput: {
     height: 46,
