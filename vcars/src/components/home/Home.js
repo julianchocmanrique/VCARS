@@ -10,6 +10,7 @@ import {
   Easing,
   Image,
   StatusBar,
+  Platform,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/Ionicons'
@@ -173,14 +174,18 @@ const Home = ({ navigation, route }) => {
     ? `${entry?.cliente ? `Cliente: ${entry.cliente}` : 'Cliente: -'}  •  ${entry?.telefono ? `Tel: ${entry.telefono}` : 'Tel: -'}`
     : 'Crea tu primer ingreso para empezar'
 
+  const topInset = insets?.top || 0
+  const androidStatusBar = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0
+  const safeTop = Math.max(topInset, androidStatusBar)
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} translucent={false} />
 
       <View style={styles.bgOrbLeft} />
       <View style={styles.bgOrbRight} />
 
-      <View style={[styles.header, { paddingTop: Math.max(12, (insets?.top || 0) + 12) }]}>
+      <View style={[styles.header, { paddingTop: safeTop + 12 }]}>
         <View style={{ flex: 1 }}>
           <View style={styles.brandWrap}>
             <Animated.View
