@@ -11,7 +11,7 @@ import {
   Image,
   StatusBar,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
@@ -40,6 +40,8 @@ const PROFILE_LABEL = {
 }
 
 const Home = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets()
+
   const [entry, setEntry] = React.useState(route?.params?.entry || null)
   const [profile, setProfile] = React.useState(null)
   const [entriesCount, setEntriesCount] = React.useState(0)
@@ -178,7 +180,7 @@ const Home = ({ navigation, route }) => {
       <View style={styles.bgOrbLeft} />
       <View style={styles.bgOrbRight} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(12, (insets?.top || 0) + 12) }]}>
         <View style={{ flex: 1 }}>
           <View style={styles.brandWrap}>
             <Animated.View
@@ -400,7 +402,7 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    paddingTop: 12,
+    // paddingTop is injected dynamically using safe area insets
     paddingHorizontal: 20,
     paddingBottom: 10,
   },
