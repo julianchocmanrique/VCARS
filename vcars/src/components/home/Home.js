@@ -9,6 +9,7 @@ import {
   Animated,
   Easing,
   Image,
+  StatusBar,
 } from 'react-native'
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -31,8 +32,17 @@ const COLORS = {
   gray: '#8F8F8F',
 }
 
+const PROFILE_LABEL = {
+  administrativo: 'Administrativo',
+  tecnico: 'Técnico',
+  cliente: 'Cliente',
+}
+
 const Home = ({ navigation, route }) => {
   const [entry, setEntry] = React.useState(route?.params?.entry || null)
+  const [profile, setProfile] = React.useState(null)
+  const [entriesCount, setEntriesCount] = React.useState(0)
+
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
 
@@ -74,48 +84,61 @@ const Home = ({ navigation, route }) => {
     scanAnim.start()
 
     let mounted = true
-    const loadCurrentEntry = async () => {
+
+    const load = async () => {
+      const p = await AsyncStorage.getItem(PROFILE_KEY)
+      if (mounted) setProfile(p)
+
       const fromRoute = route?.params?.entry
       if (fromRoute) {
         await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(fromRoute))
       }
+
       const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
       if (savedList) {
         try {
           const list = JSON.parse(savedList)
-          if (Array.isArray(list) && list.length > 0) {
-            const sorted = [...list].sort((a, b) => {
-              const da = a?.fecha ? new Date(a.fecha).getTime() : 0
-              const db = b?.fecha ? new Date(b.fecha).getTime() : 0
-              return db - da
-            })
-            if (mounted) setEntry(sorted[0])
-            return
+          if (Array.isArray(list)) {
+            if (mounted) setEntriesCount(list.length)
+            if (list.length > 0) {
+              const sorted = [...list].sort((a, b) => {
+                const da = a?.fecha ? new Date(a.fecha).getTime() : 0
+                const db = b?.fecha ? new Date(b.fecha).getTime() : 0
+                return db - da
+              })
+              if (mounted) setEntry(sorted[0])
+              return
+            }
           }
         } catch (err) {
-          // fall back to current entry
+          // fall back
         }
       }
+
       const saved = await AsyncStorage.getItem(CURRENT_ENTRY_KEY)
       if (mounted && saved) setEntry(JSON.parse(saved))
     }
-    loadCurrentEntry()
+
+    load()
+
     return () => {
       glowAnim.stop()
       scanAnim.stop()
       mounted = false
     }
-  }, [route?.params?.entry])
+  }, [route?.params?.entry, glow, scan])
 
   useFocusEffect(
     React.useCallback(() => {
       const ensureLogin = async () => {
-        const profile = await AsyncStorage.getItem(PROFILE_KEY)
-        if (!profile) {
+        const p = await AsyncStorage.getItem(PROFILE_KEY)
+        if (!p) {
           navigation.reset({
             index: 0,
             routes: [{ name: 'Login' }],
           })
+        } else {
+          setProfile(p)
         }
       }
       ensureLogin()
@@ -128,18 +151,34 @@ const Home = ({ navigation, route }) => {
         })
         return true
       }
+
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress)
       return () => sub.remove()
     }, [navigation]),
   )
 
+  const goNuevoIngreso = () => navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
+  const goOrdenServicio = () => navigation.navigate('OrdenServicio', { entry })
+  const goProceso = () => navigation.navigate('IngresoActivo')
+  const goPerfil = () => navigation.navigate('Login', { forceSelect: true })
+
+  const recentTitle = entry
+    ? `${entry.vehiculo || 'Vehículo'} · ${entry.placa || '-'}`
+    : 'Sin ingresos registrados'
+
+  const recentSub = entry
+    ? `${entry?.cliente ? `Cliente: ${entry.cliente}` : 'Cliente: -'}  •  ${entry?.telefono ? `Tel: ${entry.telefono}` : 'Tel: -'}`
+    : 'Crea tu primer ingreso para empezar'
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+
       <View style={styles.bgOrbLeft} />
       <View style={styles.bgOrbRight} />
 
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <View style={styles.brandWrap}>
             <Animated.View
               style={[
@@ -180,89 +219,154 @@ const Home = ({ navigation, route }) => {
               <Text style={styles.brand}>-CARS</Text>
             </View>
           </View>
-          <Text style={styles.tagline}>Panel general</Text>
+
+          <View style={styles.headerRow2}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pageTitle}>Panel general</Text>
+              <Text style={styles.pageSubtitle}>
+                {PROFILE_LABEL[profile] ? PROFILE_LABEL[profile] : 'Sin perfil'}
+                {entriesCount ? `  •  ${entriesCount} ingresos` : ''}
+              </Text>
+            </View>
+
+            <TouchableOpacity style={styles.profileChip} onPress={goPerfil} activeOpacity={0.85}>
+              <Icon name="person" size={16} color={COLORS.surface} />
+              <Text style={styles.profileChipText}>Perfil</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Icon name="notifications" size={18} color={COLORS.surface} />
-        </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <TouchableOpacity
-          style={styles.topCta}
-          onPress={() => navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })}
-          activeOpacity={0.9}
-        >
-          <View>
-            <Text style={styles.topCtaTitle}>Nuevo ingreso</Text>
-            <Text style={styles.topCtaSubtitle}>Registra un vehiculo rapido</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Acciones rápidas</Text>
+          <View style={styles.grid}>
+            <QuickCard
+              title="Nuevo ingreso"
+              subtitle="Registrar vehículo"
+              icon="add"
+              tone="primary"
+              onPress={goNuevoIngreso}
+            />
+            <QuickCard
+              title="Orden servicio"
+              subtitle="Wizard + fotos"
+              icon="document-text"
+              tone="secondary"
+              onPress={goOrdenServicio}
+            />
+            <QuickCard
+              title="Proceso"
+              subtitle="Ingreso activo"
+              icon="pulse"
+              tone="muted"
+              onPress={goProceso}
+            />
+            <QuickCard
+              title="Cambiar perfil"
+              subtitle="Admin / Técnico"
+              icon="swap-horizontal"
+              tone="danger"
+              onPress={goPerfil}
+            />
           </View>
-          <View style={styles.topCtaIcon}>
-            <Icon name="add" size={18} color={COLORS.surface} />
-          </View>
-        </TouchableOpacity>
-        <View style={styles.heroCard}>
-          <View style={styles.heroRow}>
-            <View>
-              <Text style={styles.heroTitle}>Ingreso reciente</Text>
-              <Text style={styles.heroSubtitle}>
-                {entry
-                  ? `${entry.vehiculo || 'Vehiculo'} - ${entry.placa}`
-                  : 'Listo para registrar un nuevo vehiculo'}
-              </Text>
-            </View>
-            <View style={styles.heroBadge}>
-              <Icon name="car-sport" size={18} color={COLORS.surface} />
-            </View>
-          </View>
-
-          <View style={styles.heroInfo}>
-            <View style={styles.heroInfoItem}>
-              <Text style={styles.heroInfoLabel}>Cliente</Text>
-              <Text style={styles.heroInfoValue}>{entry?.cliente || '-'}</Text>
-            </View>
-            <View style={styles.heroInfoItem}>
-              <Text style={styles.heroInfoLabel}>Telefono</Text>
-              <Text style={styles.heroInfoValue}>{entry?.telefono || '-'}</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() =>
-              entry
-                ? navigation.navigate('NuevoIngreso', { mode: 'edit', entry })
-                : navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
-            }
-            activeOpacity={0.9}
-          >
-            <Text style={styles.primaryBtnText}>Editar reciente</Text>
-            <Icon name="arrow-forward" size={16} color={COLORS.surface} />
-          </TouchableOpacity>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Reciente</Text>
+          <View style={styles.recentCard}>
+            <View style={styles.recentTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.recentTitle}>{recentTitle}</Text>
+                <Text style={styles.recentSubtitle}>{recentSub}</Text>
+              </View>
+              <View style={styles.recentBadge}>
+                <Icon name="car-sport" size={18} color={COLORS.surface} />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.primaryBtn, !entry && styles.primaryBtnDisabled]}
+              onPress={() =>
+                entry
+                  ? navigation.navigate('NuevoIngreso', { mode: 'edit', entry })
+                  : navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
+              }
+              activeOpacity={0.9}
+            >
+              <Text style={styles.primaryBtnText}>{entry ? 'Editar reciente' : 'Crear ingreso'}</Text>
+              <Icon name="arrow-forward" size={16} color={COLORS.surface} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ height: 88 }} />
       </ScrollView>
-      
 
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
           <View style={styles.activeIconWrap}>
             <Icon name="home" size={18} color={COLORS.surface} />
           </View>
           <Text style={[styles.navText, styles.navTextActive]}>INICIO</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('IngresoActivo')}>
+
+        <TouchableOpacity style={styles.navItem} onPress={goNuevoIngreso} activeOpacity={0.8}>
+          <Icon name="add-circle-outline" size={22} color={COLORS.textMuted} />
+          <Text style={styles.navText}>NUEVO</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={goProceso} activeOpacity={0.8}>
           <Icon name="document-text-outline" size={22} color={COLORS.textMuted} />
           <Text style={styles.navText}>PROCESO</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate('Login', { forceSelect: true })}
-        >
-          <Icon name="log-in-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.navText}>LOGIN</Text>
-        </TouchableOpacity>
       </View>
     </View>
+  )
+}
+
+const QuickCard = ({ title, subtitle, icon, tone, onPress }) => {
+  const toneStyles =
+    tone === 'primary'
+      ? {
+          bg: COLORS.blueLight,
+          text: COLORS.surface,
+          sub: 'rgba(14,17,23,0.75)',
+          iconBg: 'rgba(14,17,23,0.16)',
+          iconColor: COLORS.surface,
+        }
+      : tone === 'secondary'
+        ? {
+            bg: COLORS.surface,
+            text: COLORS.text,
+            sub: COLORS.textMuted,
+            iconBg: COLORS.surfaceAlt,
+            iconColor: COLORS.blueLight,
+          }
+        : tone === 'danger'
+          ? {
+              bg: COLORS.surface,
+              text: COLORS.text,
+              sub: COLORS.textMuted,
+              iconBg: 'rgba(212,58,58,0.12)',
+              iconColor: COLORS.red,
+            }
+          : {
+              bg: COLORS.surfaceAlt,
+              text: COLORS.text,
+              sub: COLORS.textMuted,
+              iconBg: COLORS.surface,
+              iconColor: COLORS.blueLight,
+            }
+
+  return (
+    <TouchableOpacity style={[styles.card, { backgroundColor: toneStyles.bg }]} onPress={onPress} activeOpacity={0.9}>
+      <View style={[styles.cardIcon, { backgroundColor: toneStyles.iconBg }]}>
+        <Icon name={icon} size={18} color={toneStyles.iconColor} />
+      </View>
+      <Text style={[styles.cardTitle, { color: toneStyles.text }]}>{title}</Text>
+      <Text style={[styles.cardSubtitle, { color: toneStyles.sub }]}>{subtitle}</Text>
+    </TouchableOpacity>
   )
 }
 
@@ -293,14 +397,19 @@ const styles = StyleSheet.create({
     right: -120,
     opacity: 0.25,
   },
+
   header: {
     paddingTop: 48,
     paddingHorizontal: 20,
-    paddingBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingBottom: 10,
   },
+  headerRow2: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
   brandWrap: {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
@@ -339,52 +448,101 @@ const styles = StyleSheet.create({
     height: 18,
     marginRight: 4,
   },
-  tagline: {
+
+  pageTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  pageSubtitle: {
     color: COLORS.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
-  headerBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: COLORS.blueLight,
-    justifyContent: 'center',
+
+  profileChip: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.blueLight,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     shadowColor: COLORS.blueLight,
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.22,
     shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
   },
+  profileChipText: {
+    color: COLORS.surface,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+
   scrollContent: {
-    paddingBottom: 110,
+    paddingBottom: 120,
   },
-  heroCard: {
-    marginHorizontal: 16,
+
+  section: {
     marginTop: 12,
-    backgroundColor: COLORS.surface,
-    borderRadius: 22,
-    padding: 18,
+    paddingHorizontal: 16,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+    marginBottom: 10,
+  },
+
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+
+  card: {
+    width: '48%',
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  heroRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  cardIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  heroTitle: {
-    color: COLORS.text,
-    fontSize: 22,
-    fontWeight: '800',
+  cardTitle: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '900',
   },
-  heroSubtitle: {
-    color: COLORS.textMuted,
-    marginTop: 6,
-    fontSize: 12,
+  cardSubtitle: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '700',
   },
-  heroBadge: {
+
+  recentCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  recentTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  recentBadge: {
     width: 44,
     height: 44,
     borderRadius: 16,
@@ -392,22 +550,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  heroInfo: {
-    marginTop: 16,
-    flexDirection: 'row',
-    gap: 12,
-  },  heroInfoLabel: {
-    color: COLORS.gray,
-    fontSize: 11,
-  },
-  heroInfoValue: {
+  recentTitle: {
     color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 6,
+    fontSize: 18,
+    fontWeight: '900',
   },
+  recentSubtitle: {
+    marginTop: 6,
+    color: COLORS.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
   primaryBtn: {
-    marginTop: 16,
+    marginTop: 14,
     backgroundColor: COLORS.blueLight,
     borderRadius: 14,
     paddingVertical: 12,
@@ -417,95 +573,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  primaryBtnDisabled: {
+    opacity: 0.95,
+  },
   primaryBtnText: {
     color: COLORS.surface,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
   },
-  vehiclesCard: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  vehiclesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  vehiclesTitle: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  vehiclesCount: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-  },
-  vehicleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  vehicleBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: COLORS.blueLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  vehicleText: {
-    flex: 1,
-  },
-  vehicleName: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  vehicleDetail: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  topCta: {
-    marginHorizontal: 16,
-    marginTop: 6,
-    backgroundColor: COLORS.surfaceAlt,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  topCtaTitle: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  topCtaSubtitle: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    marginTop: 4,
-  },
-  topCtaIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: COLORS.blueLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  vehiclesEmpty: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-  },
+
   bottomNav: {
     position: 'absolute',
     left: 12,
@@ -537,7 +613,7 @@ const styles = StyleSheet.create({
   navText: {
     color: COLORS.textMuted,
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   navTextActive: {
