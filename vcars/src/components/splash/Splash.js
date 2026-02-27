@@ -9,6 +9,7 @@ import {
   Easing,
   TouchableOpacity,
 } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const COLORS = {
   bg: '#05070B',
@@ -20,6 +21,8 @@ const COLORS = {
 }
 
 const FULL_TITLE = 'V-CARS'
+
+const PROFILE_KEY = '@vcars_profile'
 
 const Splash = ({ navigation }) => {
   const logoScale = useRef(new Animated.Value(0.86)).current
@@ -66,8 +69,17 @@ const Splash = ({ navigation }) => {
     }
   }, [])
 
+  const goNext = async () => {
+    try {
+      const profile = await AsyncStorage.getItem(PROFILE_KEY)
+      navigation.replace(profile ? 'Home' : 'Login')
+    } catch {
+      navigation.replace('Login')
+    }
+  }
+
   const onPress = () => {
-    navigation.replace('Login')
+    goNext()
   }
 
   return (
