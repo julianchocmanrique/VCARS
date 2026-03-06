@@ -165,6 +165,32 @@ const Home = ({ navigation, route }) => {
   const goOrdenServicio = () => navigation.navigate('OrdenServicio', { entry })
   const goProceso = () => navigation.navigate('IngresoActivo')
   const goPerfil = () => navigation.navigate('Login', { forceSelect: true })
+  const goVehiculoDetalle = () => entry && navigation.navigate('VehiculoDetalle', { vehicle: entry })
+
+  const createDemoEntry = async () => {
+    const demo = {
+      id: `demo-${Date.now()}`,
+      placa: 'ABC123',
+      cliente: 'Juan Pérez',
+      telefono: '3001234567',
+      vehiculo: 'Mazda 3 · 2018',
+      fecha: new Date().toISOString(),
+      paso: 'Recepcion y orden de servicio',
+      stepIndex: 0,
+    }
+
+    try {
+      const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
+      const list = savedList ? JSON.parse(savedList) : []
+      const next = Array.isArray(list) ? [demo, ...list] : [demo]
+      await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(next))
+      await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(demo))
+      setEntriesCount(next.length)
+      setEntry(demo)
+    } catch (err) {
+      // ignore
+    }
+  }
 
   const recentTitle = entry
     ? `${entry.vehiculo || 'Vehículo'} · ${entry.placa || '-'}`
@@ -249,34 +275,131 @@ const Home = ({ navigation, route }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Acciones rápidas</Text>
           <View style={styles.grid}>
-            <QuickCard
-              title="Nuevo ingreso"
-              subtitle="Registrar vehículo"
-              icon="add"
-              tone="primary"
-              onPress={goNuevoIngreso}
-            />
-            <QuickCard
-              title="Orden servicio"
-              subtitle="Wizard + fotos"
-              icon="document-text"
-              tone="secondary"
-              onPress={goOrdenServicio}
-            />
-            <QuickCard
-              title="Proceso"
-              subtitle="Ingreso activo"
-              icon="pulse"
-              tone="muted"
-              onPress={goProceso}
-            />
-            <QuickCard
-              title="Cambiar perfil"
-              subtitle="Admin / Técnico"
-              icon="swap-horizontal"
-              tone="danger"
-              onPress={goPerfil}
-            />
+            {(() => {
+              const role = profile || 'administrativo'
+
+              const cards =
+                role === 'cliente'
+                  ? [
+                      {
+                        title: 'Mi vehículo',
+                        subtitle: entry ? 'Ver estado' : 'Sin registros',
+                        icon: 'car-sport',
+                        tone: 'primary',
+                        onPress: goVehiculoDetalle,
+                        disabled: !entry,
+                      },
+                      {
+                        title: 'Contacto',
+                        subtitle: 'WhatsApp / soporte',
+                        icon: 'chatbubbles',
+                        tone: 'secondary',
+                        onPress: () => {},
+                        disabled: true,
+                      },
+                      {
+                        title: 'Historial',
+                        subtitle: 'Últimos 5',
+                        icon: 'time',
+                        tone: 'muted',
+                        onPress: goProceso,
+                      },
+                      {
+                        title: 'Cambiar perfil',
+                        subtitle: 'Salir',
+                        icon: 'swap-horizontal',
+                        tone: 'danger',
+                        onPress: goPerfil,
+                      },
+                    ]
+                  : role === 'tecnico'
+                    ? [
+                        {
+                          title: 'Proceso activo',
+                          subtitle: entry ? 'Continuar' : 'Sin activo',
+                          icon: 'pulse',
+                          tone: 'primary',
+                          onPress: goVehiculoDetalle,
+                          disabled: !entry,
+                        },
+                        {
+                          title: 'Ingresos',
+                          subtitle: 'Ver activos',
+                          icon: 'document-text',
+                          tone: 'secondary',
+                          onPress: goProceso,
+                        },
+                        {
+                          title: 'Historial',
+                          subtitle: 'Últimos 5',
+                          icon: 'time',
+                          tone: 'muted',
+                          onPress: goProceso,
+                        },
+                        {
+                          title: 'Cambiar perfil',
+                          subtitle: 'Admin / Cliente',
+                          icon: 'swap-horizontal',
+                          tone: 'danger',
+                          onPress: goPerfil,
+                        },
+                      ]
+                    : [
+                        {
+                          title: 'Nuevo ingreso',
+                          subtitle: 'Registrar vehículo',
+                          icon: 'add',
+                          tone: 'primary',
+                          onPress: goNuevoIngreso,
+                        },
+                        {
+                          title: 'Proceso',
+                          subtitle: 'Ingreso activo',
+                          icon: 'pulse',
+                          tone: 'secondary',
+                          onPress: goProceso,
+                        },
+                        {
+                          title: 'Historial',
+                          subtitle: 'Últimos 5',
+                          icon: 'time',
+                          tone: 'muted',
+                          onPress: goProceso,
+                        },
+                        {
+                          title: 'Cambiar perfil',
+                          subtitle: 'Admin / Técnico',
+                          icon: 'swap-horizontal',
+                          tone: 'danger',
+                          onPress: goPerfil,
+                        },
+                      ]
+
+              const withDev = __DEV__
+                ? [
+                    {
+                      title: 'Ingreso demo',
+                      subtitle: 'Crear ABC123',
+                      icon: 'sparkles',
+                      tone: 'secondary',
+                      onPress: createDemoEntry,
+                    },
+                    ...cards,
+                  ]
+                : cards
+
+              return withDev.map((c) => (
+                <QuickCard
+                  key={c.title}
+                  title={c.title}
+                  subtitle={c.subtitle}
+                  icon={c.icon}
+                  tone={c.tone}
+                  onPress={c.onPress}
+                  disabled={c.disabled}
+                />
+              ))
+            })()}
           </View>
         </View>
 
@@ -295,14 +418,30 @@ const Home = ({ navigation, route }) => {
 
             <TouchableOpacity
               style={[styles.primaryBtn, !entry && styles.primaryBtnDisabled]}
-              onPress={() =>
-                entry
-                  ? navigation.navigate('NuevoIngreso', { mode: 'edit', entry })
-                  : navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
-              }
+              onPress={() => {
+                const role = profile || 'administrativo'
+                if (!entry) {
+                  if (role === 'cliente') return
+                  return navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
+                }
+
+                if (role === 'cliente') {
+                  return navigation.navigate('VehiculoDetalle', { vehicle: entry })
+                }
+
+                return navigation.navigate('NuevoIngreso', { mode: 'edit', entry })
+              }}
               activeOpacity={0.9}
+              disabled={!entry && (profile || 'administrativo') === 'cliente'}
             >
-              <Text style={styles.primaryBtnText}>{entry ? 'Editar reciente' : 'Crear ingreso'}</Text>
+              <Text style={styles.primaryBtnText}>
+                {(() => {
+                  const role = profile || 'administrativo'
+                  if (!entry) return 'Crear ingreso'
+                  if (role === 'cliente') return 'Ver estado'
+                  return 'Editar reciente'
+                })()}
+              </Text>
               <Icon name="arrow-forward" size={16} color={COLORS.surface} />
             </TouchableOpacity>
           </View>
@@ -333,7 +472,7 @@ const Home = ({ navigation, route }) => {
   )
 }
 
-const QuickCard = ({ title, subtitle, icon, tone, onPress }) => {
+const QuickCard = ({ title, subtitle, icon, tone, onPress, disabled }) => {
   const toneStyles =
     tone === 'primary'
       ? {
@@ -368,7 +507,12 @@ const QuickCard = ({ title, subtitle, icon, tone, onPress }) => {
             }
 
   return (
-    <TouchableOpacity style={[styles.card, { backgroundColor: toneStyles.bg }]} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: toneStyles.bg }, disabled && { opacity: 0.5 }]}
+      onPress={onPress}
+      activeOpacity={0.9}
+      disabled={!!disabled}
+    >
       <View style={[styles.cardIcon, { backgroundColor: toneStyles.iconBg }]}>
         <Icon name={icon} size={18} color={toneStyles.iconColor} />
       </View>
