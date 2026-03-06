@@ -20,16 +20,17 @@ const COLORS = {
 const PROFILE_KEY = '@vcars_profile'
 
 const PROCESS_STEPS = [
-  'Recepcion y orden de servicio',
-  'Cotizacion detallada',
-  'Cotizacion',
-  'Aprobacion del cliente',
-  'Ejecucion en taller',
-  'Entrega del vehiculo',
+  'Recepción (Ingreso)',
+  'Diagnóstico / Cotización interna',
+  'Cotización al cliente (Admin)',
+  'Autorización del cliente',
+  'Ejecución (Taller)',
+  'Entrega / Cierre (Admin)',
 ]
 
-const TECH_ALLOWED = new Set([0, 1, 4, 5])
-const CLIENT_ALLOWED = new Set([0, 3, 4, 5])
+// Permisos por rol (alineado al flujo real)
+const TECH_ALLOWED = new Set([0, 1, 4])
+const CLIENT_ALLOWED = new Set([0, 3, 5])
 
 const ENTRIES_KEY = '@vcars_entries'
 

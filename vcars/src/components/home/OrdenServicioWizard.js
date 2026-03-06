@@ -80,8 +80,12 @@ const STATUS_CYCLE = ['S', 'N', 'C', 'I']
 const PAY_OPTIONS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Credito', 'Otro']
 const BANK_OPTIONS = ['Nequi', 'Daviplata']
 const FUEL_OPTIONS = ['0%', '25%', '50%', '75%', '100%']
-const TECH_ALLOWED = new Set([0, 1, 4, 5])
-const CLIENT_ALLOWED = new Set([0, 3, 4, 5])
+// Permisos por rol (MVP sin backend)
+// - tecnico: recepcion + diagnostico interno + ejecucion
+// - administrativo: recepcion + cotizacion al cliente + entrega/cierre (puede ver todo)
+// - cliente: ver recepcion + autorizacion + entrega/estado
+const TECH_ALLOWED = new Set([0, 1, 4])
+const CLIENT_ALLOWED = new Set([0, 3, 5])
 
 const FIELD_LABELS = {
   ordenNo: 'Orden No.',
@@ -203,12 +207,18 @@ const OrdenServicioWizard = ({ navigation, route }) => {
 
   const steps = useMemo(
     () => [
-      { key: 'recepcion', title: 'Recepcion y orden de servicio' },
-      { key: 'cotizacion_detallada', title: 'Cotizacion detallada' },
-      { key: 'cotizacion', title: 'Cotizacion' },
-      { key: 'aprobacion', title: 'Aprobacion del cliente' },
-      { key: 'trabajo', title: 'Ejecucion / taller' },
-      { key: 'entrega', title: 'Entrega del vehiculo' },
+      // 0) TECH recibe el carro, captura datos, evidencia inicial
+      { key: 'recepcion', title: 'Recepción (Ingreso)' },
+      // 1) TECH diagnostica y arma cotización interna (repuestos/trabajos sugeridos)
+      { key: 'cotizacion_interna', title: 'Diagnóstico / Cotización interna' },
+      // 2) ADMIN prepara y envía cotización formal al cliente
+      { key: 'cotizacion_formal', title: 'Cotización al cliente (Admin)' },
+      // 3) CLIENT aprueba o comenta
+      { key: 'aprobacion', title: 'Autorización del cliente' },
+      // 4) TECH ejecuta mantenimiento
+      { key: 'trabajo', title: 'Ejecución (Taller)' },
+      // 5) ADMIN confirma OK interno y coordina entrega
+      { key: 'entrega', title: 'Entrega / Cierre (Admin)' },
     ],
     [],
   )
@@ -695,17 +705,16 @@ const OrdenServicioWizard = ({ navigation, route }) => {
     }
     setCompleted(nextCompleted)
     setStep(nextStep)
-    if (step === 2) {
-      // Cotizacion
+    if (step === 2 && profile === 'administrativo') {
+      // Cotización al cliente (ADMIN)
       setTimeout(() => {
-        // show after save
         if (Platform.OS === 'android') {
           // eslint-disable-next-line global-require
           const ToastAndroid = require('react-native').ToastAndroid
-          ToastAndroid.show('Se envio un mensaje al cliente', ToastAndroid.SHORT)
+          ToastAndroid.show('Cotización enviada al cliente', ToastAndroid.SHORT)
         } else {
           // eslint-disable-next-line no-alert
-          alert('Se envio un mensaje al cliente')
+          alert('Cotización enviada al cliente')
         }
       }, 100)
     }
