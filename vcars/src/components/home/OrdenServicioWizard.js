@@ -636,6 +636,11 @@ const OrdenServicioWizard = ({ navigation, route }) => {
 
     const nextCompleted = Array.from(new Set([...(completed || []), step]))
     const nextStep = step < steps.length - 1 ? step + 1 : step
+
+    // Keep entry state in sync
+    const nextPasoTitle = steps[nextStep]?.title || steps[0]?.title
+    const nextPaso = normalizeStepTitle(nextPasoTitle)
+    const nextStatus = nextStep >= steps.length - 1 ? 'done' : 'active'
     await AsyncStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -667,8 +672,10 @@ const OrdenServicioWizard = ({ navigation, route }) => {
             matched = true
             return {
               ...item,
-              paso: steps[nextStep]?.title || item.paso,
+              paso: nextPaso,
               stepIndex: nextStep,
+              status: nextStatus,
+              updatedAt: new Date().toISOString(),
             }
           }
           return item
@@ -676,14 +683,18 @@ const OrdenServicioWizard = ({ navigation, route }) => {
         if (!matched) {
           const currentEntryRaw = await AsyncStorage.getItem(CURRENT_ENTRY_KEY)
           const currentEntry = currentEntryRaw ? JSON.parse(currentEntryRaw) : {}
+          const paso = nextPaso
+          const status = nextStatus
           nextEntries.unshift({
             id: currentEntry?.id || targetEntryId,
             placa: currentEntry?.placa || form.placa || String(targetEntryId),
             cliente: currentEntry?.cliente || form.propietario || 'Cliente',
             telefono: currentEntry?.telefono || form.telefono || '',
             vehiculo: currentEntry?.vehiculo || form.marca || '',
-            paso: steps[nextStep]?.title || 'Recepcion y orden de servicio',
+            paso: normalizeStepTitle(paso),
             stepIndex: nextStep,
+            status,
+            updatedAt: new Date().toISOString(),
           })
         }
         await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(nextEntries))

@@ -9,6 +9,7 @@ import {
   Easing,
   Image,
 } from 'react-native'
+import { VCARS_STEP_TITLES, normalizeStepTitle, stepIndexFromTitle } from '../../lib/vcarsProcess'
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
@@ -18,14 +19,7 @@ const PROFILE_KEY = '@vcars_profile'
 const ENTRIES_KEY = '@vcars_entries'
 const STORAGE_MAP_KEY = '@vcars_orden_servicio_map'
 
-const PROCESS_STEPS = [
-  'Recepcion y orden de servicio',
-  'Cotizacion detallada',
-  'Cotizacion',
-  'Aprobacion del cliente',
-  'Ejecucion en taller',
-  'Entrega del vehiculo',
-]
+import { VCARS_STEP_TITLES, normalizeStepTitle, stepIndexFromTitle } from '../../lib/vcarsProcess'
 
 
 const COLORS = {
@@ -44,6 +38,8 @@ const COLORS = {
 const IngresoActivo = ({ navigation }) => {
   const [entry, setEntry] = React.useState(null)
   const [entries, setEntries] = React.useState([])
+  const [profile, setProfile] = React.useState('administrativo')
+  const [viewMode, setViewMode] = React.useState('active') // active | history
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
 
@@ -101,8 +97,6 @@ const IngresoActivo = ({ navigation }) => {
 
   const loadEntries = React.useCallback(async () => {
     const saved = await AsyncStorage.getItem(ENTRIES_KEY)
-    const savedMapRaw = await AsyncStorage.getItem(STORAGE_MAP_KEY)
-    const savedMap = savedMapRaw ? JSON.parse(savedMapRaw) : {}
     if (saved) {
       const parsed = JSON.parse(saved)
       if (Array.isArray(parsed)) {
@@ -116,14 +110,15 @@ const IngresoActivo = ({ navigation }) => {
   useFocusEffect(
     React.useCallback(() => {
       const ensureLogin = async () => {
-        const profile = await AsyncStorage.getItem(PROFILE_KEY)
-        if (!profile) {
+        const savedProfile = await AsyncStorage.getItem(PROFILE_KEY)
+        if (!savedProfile) {
           navigation.reset({
             index: 0,
             routes: [{ name: 'Login' }],
           })
           return
         }
+        setProfile(savedProfile)
         loadEntry()
         loadEntries()
       }
@@ -132,31 +127,73 @@ const IngresoActivo = ({ navigation }) => {
   )
 
   const autos = React.useMemo(() => {
-    if (!entry) return entries
-    const defaultStep = PROCESS_STEPS[0] || 'Pendiente'
-    const updated = entries.map((item) => {
-      if (item.id === entry.id) {
-        return {
-          ...item,
-          placa: entry.placa || item.placa,
-          cliente: entry.cliente || item.cliente,
-          vehiculo: entry.vehiculo || item.vehiculo,
-          telefono: entry.telefono || item.telefono,
-          paso: item.paso || defaultStep,
-          isCurrent: true,
-        }
-      }
-      return item
-    })
-    if (!updated.find((item) => item.id === entry.id)) {
-      updated.unshift({
+    // Merge current entry into entries list
+    const base = Array.isArray(entries) ? entries : []
+    const merged = (() => {
+      if (!entry) return base
+      const defaultStep = VCARS_STEP_TITLES[0] || 'Pendiente'
+      const normalizedEntry = {
         ...entry,
-        paso: entry.paso || defaultStep,
-        isCurrent: true,
+        paso: normalizeStepTitle(entry.paso || defaultStep),
+        stepIndex:
+          typeof entry.stepIndex === 'number'
+            ? entry.stepIndex
+            : stepIndexFromTitle(entry.paso || defaultStep),
+        status: entry.status || 'active',
+        updatedAt: entry.updatedAt || entry.fecha || new Date().toISOString(),
+      }
+
+      const updated = base.map((item) => {
+        if (item.id === normalizedEntry.id) {
+          const paso = normalizeStepTitle(item.paso || normalizedEntry.paso || defaultStep)
+          const stepIndex =
+            typeof item.stepIndex === 'number'
+              ? item.stepIndex
+              : stepIndexFromTitle(paso)
+          return {
+            ...item,
+            ...normalizedEntry,
+            paso,
+            stepIndex,
+            isCurrent: true,
+          }
+        }
+        return item
       })
-    }
-    return updated
-  }, [entries, entry])
+
+      if (!updated.find((item) => item.id === normalizedEntry.id)) {
+        updated.unshift({ ...normalizedEntry, isCurrent: true })
+      }
+      return updated
+    })()
+
+    // Normalize legacy items
+    const normalized = merged.map((item) => {
+      const paso = normalizeStepTitle(item.paso || VCARS_STEP_TITLES[0])
+      const stepIndex =
+        typeof item.stepIndex === 'number'
+          ? item.stepIndex
+          : stepIndexFromTitle(paso)
+      const status = item.status || (stepIndex >= VCARS_STEP_TITLES.length - 1 ? 'done' : 'active')
+      return {
+        ...item,
+        paso,
+        stepIndex,
+        status,
+        updatedAt: item.updatedAt || item.fecha || new Date().toISOString(),
+      }
+    })
+
+    // View mode filtering
+    const onlyActive = normalized.filter((it) => it.status !== 'done' && it.status !== 'cancelled')
+    const onlyHistory = normalized.filter((it) => it.status === 'done' || it.status === 'cancelled')
+
+    const scoped = viewMode === 'history' ? onlyHistory : onlyActive
+
+    // For tech, force active view
+    if (profile === 'tecnico') return onlyActive
+    return scoped
+  }, [entries, entry, profile, viewMode])
 
   const saveEntries = async (next) => {
     setEntries(next)
@@ -231,11 +268,22 @@ const IngresoActivo = ({ navigation }) => {
         <View style={styles.listCard}>
           <View style={styles.listHeader}>
             <View>
-              <Text style={styles.listTitle}>Proceso de vehiculos</Text>
+              <Text style={styles.listTitle}>{profile === 'administrativo' && viewMode === 'history' ? 'Historial de vehículos' : 'Vehículos en proceso'}</Text>
               <Text style={styles.listSubtitle}>Placa - Cliente - Paso actual</Text>
             </View>
-            <View style={styles.listCountPill}>
-              <Text style={styles.listCountText}>{autos.length}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {profile === 'administrativo' ? (
+                <TouchableOpacity
+                  onPress={() => setViewMode((m) => (m === 'active' ? 'history' : 'active'))}
+                  activeOpacity={0.85}
+                  style={[styles.listCountPill, { paddingHorizontal: 10 }]}
+                >
+                  <Text style={styles.listCountText}>{viewMode === 'active' ? 'ACTIVOS' : 'HISTORIAL'}</Text>
+                </TouchableOpacity>
+              ) : null}
+              <View style={styles.listCountPill}>
+                <Text style={styles.listCountText}>{autos.length}</Text>
+              </View>
             </View>
           </View>
           {autos.length ? (
@@ -262,7 +310,7 @@ const IngresoActivo = ({ navigation }) => {
                   </View>
                   <View style={styles.stepPill}>
                     <Text style={styles.stepText} numberOfLines={2}>
-                      {item.paso || PROCESS_STEPS[item.stepIndex] || 'Pendiente'}
+                      {item.paso || VCARS_STEP_TITLES[item.stepIndex] || 'Pendiente'}
                     </Text>
                   </View>
                 </TouchableOpacity>
