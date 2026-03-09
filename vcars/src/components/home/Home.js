@@ -164,9 +164,16 @@ const Home = ({ navigation, route }) => {
 
   const goNuevoIngreso = () => navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
   const goOrdenServicio = () => navigation.navigate('OrdenServicio', { entry })
-  const goProceso = () => navigation.navigate('IngresoActivo')
+  const goProceso = () => {
+    if ((profile || 'administrativo') === 'cliente') {
+      navigation.navigate('MisVehiculos')
+      return
+    }
+    navigation.navigate('IngresoActivo')
+  }
   const goPerfil = () => navigation.navigate('Login', { forceSelect: true })
   const goVehiculoDetalle = () => entry && navigation.navigate('VehiculoDetalle', { vehicle: entry })
+  const goMisVehiculos = () => navigation.navigate('MisVehiculos')
 
   const createDemoEntry = async () => {
     // Back-compat: keep a simple quick seed
@@ -293,10 +300,17 @@ const Home = ({ navigation, route }) => {
                 role === 'cliente'
                   ? [
                       {
-                        title: 'Mi vehículo',
-                        subtitle: entry ? 'Ver estado' : 'Sin registros',
+                        title: 'Mis vehículos',
+                        subtitle: 'Ver historial',
                         icon: 'car-sport',
                         tone: 'primary',
+                        onPress: goMisVehiculos,
+                      },
+                      {
+                        title: 'Vehículo activo',
+                        subtitle: entry ? 'Ver estado' : 'Sin activo',
+                        icon: 'pulse',
+                        tone: 'secondary',
                         onPress: goVehiculoDetalle,
                         disabled: !entry,
                       },
@@ -304,16 +318,9 @@ const Home = ({ navigation, route }) => {
                         title: 'Contacto',
                         subtitle: 'WhatsApp / soporte',
                         icon: 'chatbubbles',
-                        tone: 'secondary',
+                        tone: 'muted',
                         onPress: () => {},
                         disabled: true,
-                      },
-                      {
-                        title: 'Historial',
-                        subtitle: 'Últimos 5',
-                        icon: 'time',
-                        tone: 'muted',
-                        onPress: goProceso,
                       },
                       {
                         title: 'Cambiar perfil',

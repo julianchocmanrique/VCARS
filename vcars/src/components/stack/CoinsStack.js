@@ -8,6 +8,7 @@ import Home from '../home/Home'
 import OrdenServicioWizard from '../home/OrdenServicioWizard'
 import IngresoActivo from '../home/IngresoActivo'
 import VehiculoDetalle from '../home/VehiculoDetalle'
+import MisVehiculos from '../home/MisVehiculos'
 
 const Stack = createNativeStackNavigator()
 
@@ -27,6 +28,7 @@ const CoinsStack = () => {
       <Stack.Screen name="OrdenServicio" component={OrdenServicioWizard} />
       <Stack.Screen name="IngresoActivo" component={IngresoActivo} />
       <Stack.Screen name="VehiculoDetalle" component={VehiculoDetalle} />
+      <Stack.Screen name="MisVehiculos" component={MisVehiculos} />
     </Stack.Navigator>
   )
 }

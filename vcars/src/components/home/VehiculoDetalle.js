@@ -236,12 +236,16 @@ const VehiculoDetalle = ({ navigation, route }) => {
           <TouchableOpacity
             style={styles.primaryBtn}
             activeOpacity={0.9}
-            onPress={() =>
+            onPress={() => {
+              if (profile === 'cliente') {
+                navigation.navigate('MisVehiculos')
+                return
+              }
               navigation.navigate('OrdenServicio', {
                 startStep: allowedIndices[displayCurrentIndex] ?? currentStepIndex,
                 entryId: vehicle?.id || vehicle?.placa || null,
               })
-            }
+            }}
           >
             <Text style={styles.primaryBtnText}>Continuar</Text>
             <Icon name="arrow-forward" size={16} color={COLORS.surfaceAlt} />
