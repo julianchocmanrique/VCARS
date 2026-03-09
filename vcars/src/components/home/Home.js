@@ -16,6 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
+import { DEMO_PROFILES, seedDemoProfile } from '../../lib/vcarsDemoSeed'
 
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const PROFILE_KEY = '@vcars_profile'
@@ -168,27 +169,37 @@ const Home = ({ navigation, route }) => {
   const goVehiculoDetalle = () => entry && navigation.navigate('VehiculoDetalle', { vehicle: entry })
 
   const createDemoEntry = async () => {
-    const demo = {
-      id: `demo-${Date.now()}`,
-      placa: 'ABC123',
-      cliente: 'Juan Pérez',
-      telefono: '3001234567',
-      vehiculo: 'Mazda 3 · 2018',
-      fecha: new Date().toISOString(),
-      paso: 'Recepcion y orden de servicio',
-      stepIndex: 0,
+    // Back-compat: keep a simple quick seed
+    await seedDemoProfile('demo-admin')
+    const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList)
+        if (Array.isArray(list) && list.length) {
+          setEntriesCount(list.length)
+          setEntry(list[0])
+        }
+      } catch (err) {
+        // ignore
+      }
     }
+  }
 
-    try {
-      const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
-      const list = savedList ? JSON.parse(savedList) : []
-      const next = Array.isArray(list) ? [demo, ...list] : [demo]
-      await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(next))
-      await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(demo))
-      setEntriesCount(next.length)
-      setEntry(demo)
-    } catch (err) {
-      // ignore
+  const seedAndReload = async (demoId) => {
+    const demo = await seedDemoProfile(demoId)
+    setProfile(demo.profile)
+    const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
+    if (savedList) {
+      try {
+        const list = JSON.parse(savedList)
+        if (Array.isArray(list) && list.length) {
+          setEntriesCount(list.length)
+          setEntry(list[0])
+          await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(list[0]))
+        }
+      } catch (err) {
+        // ignore
+      }
     }
   }
 
@@ -375,18 +386,19 @@ const Home = ({ navigation, route }) => {
                         },
                       ]
 
-              const withDev = __DEV__
+              const devCards = __DEV__
                 ? [
-                    {
-                      title: 'Ingreso demo',
-                      subtitle: 'Crear ABC123',
+                    ...DEMO_PROFILES.slice(0, 5).map((d) => ({
+                      title: d.label,
+                      subtitle: 'Cargar datos de prueba',
                       icon: 'sparkles',
                       tone: 'secondary',
-                      onPress: createDemoEntry,
-                    },
-                    ...cards,
+                      onPress: () => seedAndReload(d.id),
+                    })),
                   ]
-                : cards
+                : []
+
+              const withDev = __DEV__ ? [...devCards, ...cards] : cards
 
               return withDev.map((c) => (
                 <QuickCard
