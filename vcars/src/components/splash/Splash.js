@@ -9,6 +9,7 @@ import {
   Easing,
   TouchableOpacity,
 } from 'react-native'
+import { getSession } from '../../lib/vcarsAuth'
 
 const COLORS = {
   bg: '#05070B',
@@ -57,7 +58,14 @@ const Splash = ({ navigation }) => {
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start()
+    ]).start(({ finished }) => {
+      if (finished) {
+        // Auto-continue after the intro animation
+        setTimeout(() => {
+          goNext()
+        }, 450)
+      }
+    })
 
     orbitAnim.start()
 
@@ -66,8 +74,17 @@ const Splash = ({ navigation }) => {
     }
   }, [])
 
+  const goNext = async () => {
+    const session = await getSession()
+    if (session) {
+      navigation.replace('Home')
+    } else {
+      navigation.replace('Login')
+    }
+  }
+
   const onPress = () => {
-    navigation.replace('Login')
+    goNext()
   }
 
   return (

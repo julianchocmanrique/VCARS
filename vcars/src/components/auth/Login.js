@@ -8,17 +8,12 @@ import {
   Animated,
   Easing,
   StatusBar,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import Icon from 'react-native-vector-icons/Ionicons'
-
-const PROFILE_KEY = '@vcars_profile'
-
-const PROFILES = [
-  { id: 'administrativo', label: 'Administrativo', icon: 'briefcase' },
-  { id: 'tecnico', label: 'Tecnico', icon: 'build' },
-  { id: 'cliente', label: 'Cliente', icon: 'person' },
-]
+import { DEMO_USERS, signIn } from '../../lib/vcarsAuth'
 
 const COLORS = {
   bg: '#05070B',
@@ -31,20 +26,13 @@ const COLORS = {
   blueLight: '#86B9E6',
 }
 
-const Login = ({ navigation, route }) => {
-  const [selected, setSelected] = React.useState('')
+const Login = ({ navigation }) => {
+  const [username, setUsername] = React.useState('')
+  const [password, setPassword] = React.useState('')
+  const [error, setError] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
-
-  React.useEffect(() => {
-    const loadProfile = async () => {
-      const saved = await AsyncStorage.getItem(PROFILE_KEY)
-      if (saved) {
-        setSelected(saved)
-      }
-    }
-    loadProfile()
-  }, [])
 
   React.useEffect(() => {
     const glowAnim = Animated.loop(
@@ -89,13 +77,30 @@ const Login = ({ navigation, route }) => {
   }, [glow, scan])
 
   const onLogin = async () => {
-    if (!selected) return
-    await AsyncStorage.setItem(PROFILE_KEY, selected)
-    navigation.replace('Home')
+    setError('')
+    setLoading(true)
+    try {
+      const res = await signIn({ username, password })
+      if (!res.ok) {
+        setError(res.error || 'No se pudo iniciar sesión')
+        return
+      }
+      navigation.replace('Home')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const quickFill = (u) => {
+    setUsername(u.username)
+    setPassword(u.password)
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
 
       <View style={styles.header}>
@@ -139,45 +144,67 @@ const Login = ({ navigation, route }) => {
             <Text style={styles.brand}>-CARS</Text>
           </View>
         </View>
-        <Text style={styles.subtitle}>Selecciona tu perfil</Text>
+        <Text style={styles.subtitle}>Inicia sesión</Text>
       </View>
 
-      <View style={styles.list}>
-        {PROFILES.map((profile) => {
-          const active = selected === profile.id
-          return (
-            <TouchableOpacity
-              key={profile.id}
-              style={[styles.card, active && styles.cardActive]}
-              activeOpacity={0.85}
-              onPress={() => setSelected(profile.id)}
-            >
-              <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
-                <Icon name={profile.icon} size={18} color={active ? COLORS.surface : COLORS.text} />
-              </View>
-              <Text style={styles.cardText}>{profile.label}</Text>
-              {active ? (
-                <Icon name="checkmark-circle" size={18} color={COLORS.blueLight} />
-              ) : (
-                <View style={styles.cardDot} />
-              )}
-            </TouchableOpacity>
-          )
-        })}
-      </View>
+      <View style={styles.formCard}>
+        <Text style={styles.label}>Usuario</Text>
+        <View style={styles.inputWrap}>
+          <Icon name="person" size={18} color={COLORS.textMuted} />
+          <TextInput
+            value={username}
+            onChangeText={setUsername}
+            placeholder="admin / tecnico / cliente"
+            placeholderTextColor={COLORS.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.input}
+          />
+        </View>
 
-      <View style={styles.footer}>
+        <Text style={[styles.label, { marginTop: 12 }]}>Contraseña</Text>
+        <View style={styles.inputWrap}>
+          <Icon name="lock-closed" size={18} color={COLORS.textMuted} />
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            placeholder="••••"
+            placeholderTextColor={COLORS.textMuted}
+            secureTextEntry
+            style={styles.input}
+          />
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
         <TouchableOpacity
-          style={[styles.loginBtn, !selected && styles.loginBtnDisabled]}
+          style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
           onPress={onLogin}
           activeOpacity={0.9}
-          disabled={!selected}
+          disabled={loading}
         >
-          <Text style={styles.loginText}>Ingresar</Text>
+          <Text style={styles.loginText}>{loading ? 'Validando…' : 'Ingresar'}</Text>
           <Icon name="arrow-forward" size={16} color={COLORS.surface} />
         </TouchableOpacity>
+
+        {__DEV__ ? (
+          <View style={styles.quickRow}>
+            {DEMO_USERS.map((u) => (
+              <TouchableOpacity
+                key={u.id}
+                style={styles.quickPill}
+                onPress={() => quickFill(u)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.quickText}>{u.username}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
+        <Text style={styles.hint}>En esta fase (MVP) las credenciales son locales para probar roles.</Text>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -236,53 +263,68 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 10,
   },
-  list: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  card: {
+  formCard: {
+    marginTop: 12,
+    marginHorizontal: 16,
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  label: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  inputWrap: {
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  cardActive: {
-    borderColor: COLORS.blueLight,
-    shadowColor: COLORS.blueLight,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-  },
-  iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    gap: 10,
+    backgroundColor: COLORS.surfaceAlt,
     borderWidth: 1,
     borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  iconWrapActive: {
-    backgroundColor: COLORS.blueLight,
-    borderColor: COLORS.blueLight,
-  },
-  cardText: {
+  input: {
+    flex: 1,
     color: COLORS.text,
     fontSize: 14,
-    fontWeight: '700',
-    flex: 1,
+    padding: 0,
   },
-  cardDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.border,
+  error: {
+    marginTop: 10,
+    color: '#FCA5A5',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  quickRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(134,185,230,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(134,185,230,0.35)',
+  },
+  quickText: {
+    color: COLORS.blueLight,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  hint: {
+    marginTop: 12,
+    color: COLORS.textMuted,
+    fontSize: 11,
   },
   footer: {
     marginTop: 'auto',
