@@ -3,6 +3,7 @@ import { View, StyleSheet, Text, TouchableOpacity, ScrollView, Image, Animated, 
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
+import { VCARS_STEP_TITLES, allowedStepIndices, normalizeStepTitle, stepIndexFromTitle } from '../../lib/vcarsProcess'
 
 const COLORS = {
   bg: '#05070B',
@@ -19,27 +20,15 @@ const COLORS = {
 
 const PROFILE_KEY = '@vcars_profile'
 
-const PROCESS_STEPS = [
-  'Recepción (Ingreso)',
-  'Diagnóstico / Cotización interna',
-  'Cotización al cliente (Admin)',
-  'Autorización del cliente',
-  'Ejecución (Taller)',
-  'Entrega / Cierre (Admin)',
-]
-
-// Permisos por rol (alineado al flujo real)
-const TECH_ALLOWED = new Set([0, 1, 4])
-const CLIENT_ALLOWED = new Set([0, 3, 5])
+const PROCESS_STEPS = VCARS_STEP_TITLES
 
 const ENTRIES_KEY = '@vcars_entries'
 
 const VehiculoDetalle = ({ navigation, route }) => {
   const vehicle = route?.params?.vehicle || {}
-  const [currentStepIndex, setCurrentStepIndex] = React.useState(
-    Math.max(0, PROCESS_STEPS.findIndex((step) => step === vehicle.paso)),
-  )
-  const [currentStepLabel, setCurrentStepLabel] = React.useState(vehicle.paso || '')
+  const normalizedPaso = normalizeStepTitle(vehicle.paso)
+  const [currentStepIndex, setCurrentStepIndex] = React.useState(stepIndexFromTitle(normalizedPaso))
+  const [currentStepLabel, setCurrentStepLabel] = React.useState(normalizedPaso || '')
   const [profile, setProfile] = React.useState('administrativo')
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
@@ -136,12 +125,7 @@ const VehiculoDetalle = ({ navigation, route }) => {
     }, [navigation]),
   )
 
-  const allowedIndices =
-    profile === 'tecnico'
-      ? PROCESS_STEPS.map((_, idx) => idx).filter((idx) => TECH_ALLOWED.has(idx))
-      : profile === 'cliente'
-        ? PROCESS_STEPS.map((_, idx) => idx).filter((idx) => CLIENT_ALLOWED.has(idx))
-        : PROCESS_STEPS.map((_, idx) => idx)
+  const allowedIndices = allowedStepIndices(profile)
 
   const displaySteps = allowedIndices.map((idx) => PROCESS_STEPS[idx])
   const displayCurrentIndex = (() => {

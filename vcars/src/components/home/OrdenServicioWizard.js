@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import Icon from 'react-native-vector-icons/Ionicons'
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker'
 import DateTimePicker from '@react-native-community/datetimepicker'
+import { VCARS_STEPS, allowedStepIndices, normalizeStepTitle } from '../../lib/vcarsProcess'
 
 const STORAGE_KEY = '@vcars_orden_servicio'
 const STORAGE_MAP_KEY = '@vcars_orden_servicio_map'
@@ -84,8 +85,7 @@ const FUEL_OPTIONS = ['0%', '25%', '50%', '75%', '100%']
 // - tecnico: recepcion + diagnostico interno + ejecucion
 // - administrativo: recepcion + cotizacion al cliente + entrega/cierre (puede ver todo)
 // - cliente: ver recepcion + autorizacion + entrega/estado
-const TECH_ALLOWED = new Set([0, 1, 4])
-const CLIENT_ALLOWED = new Set([0, 3, 5])
+// See src/lib/vcarsProcess.js for the canonical process + permissions
 
 const FIELD_LABELS = {
   ordenNo: 'Orden No.',
@@ -205,23 +205,7 @@ const OrdenServicioWizard = ({ navigation, route }) => {
   const saveTimer = useRef(null)
   const scrollRef = useRef(null)
 
-  const steps = useMemo(
-    () => [
-      // 0) TECH recibe el carro, captura datos, evidencia inicial
-      { key: 'recepcion', title: 'Recepción (Ingreso)' },
-      // 1) TECH diagnostica y arma cotización interna (repuestos/trabajos sugeridos)
-      { key: 'cotizacion_interna', title: 'Diagnóstico / Cotización interna' },
-      // 2) ADMIN prepara y envía cotización formal al cliente
-      { key: 'cotizacion_formal', title: 'Cotización al cliente (Admin)' },
-      // 3) CLIENT aprueba o comenta
-      { key: 'aprobacion', title: 'Autorización del cliente' },
-      // 4) TECH ejecuta mantenimiento
-      { key: 'trabajo', title: 'Ejecución (Taller)' },
-      // 5) ADMIN confirma OK interno y coordina entrega
-      { key: 'entrega', title: 'Entrega / Cierre (Admin)' },
-    ],
-    [],
-  )
+  const steps = useMemo(() => VCARS_STEPS, [])
 
   useEffect(() => {
     const loadDraft = async () => {
@@ -247,6 +231,8 @@ const OrdenServicioWizard = ({ navigation, route }) => {
       const applyEntry = (target) => {
         if (!currentEntry) return target
         const next = { ...target }
+        // Normalize legacy step title if needed
+        if (next.paso) next.paso = normalizeStepTitle(next.paso)
         if (!next.placa) next.placa = currentEntry.placa || next.placa
         if (!next.propietario) next.propietario = currentEntry.cliente || next.propietario
         if (!next.facturaNombre) next.facturaNombre = currentEntry.cliente || next.facturaNombre
@@ -721,12 +707,7 @@ const OrdenServicioWizard = ({ navigation, route }) => {
     navigation.goBack()
   }
 
-  const allowedIndices =
-    profile === 'tecnico'
-      ? steps.map((_, idx) => idx).filter((idx) => TECH_ALLOWED.has(idx))
-      : profile === 'cliente'
-        ? steps.map((_, idx) => idx).filter((idx) => CLIENT_ALLOWED.has(idx))
-        : steps.map((_, idx) => idx)
+  const allowedIndices = allowedStepIndices(profile)
 
   const resolveAllowedStep = (target) => {
     if (allowedIndices.includes(target)) return target
