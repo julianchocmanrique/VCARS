@@ -13,13 +13,12 @@ import { VCARS_STEP_TITLES, normalizeStepTitle, stepIndexFromTitle } from '../..
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
+import { CLIENT_IDENTITY_KEY, isPlateAllowed } from '../../lib/vcarsClientIdentity'
 
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const PROFILE_KEY = '@vcars_profile'
 const ENTRIES_KEY = '@vcars_entries'
 const STORAGE_MAP_KEY = '@vcars_orden_servicio_map'
-
-import { VCARS_STEP_TITLES, normalizeStepTitle, stepIndexFromTitle } from '../../lib/vcarsProcess'
 
 
 const COLORS = {
@@ -39,6 +38,7 @@ const IngresoActivo = ({ navigation }) => {
   const [entry, setEntry] = React.useState(null)
   const [entries, setEntries] = React.useState([])
   const [profile, setProfile] = React.useState('administrativo')
+  const [clientIdentity, setClientIdentity] = React.useState(null)
   const [viewMode, setViewMode] = React.useState('active') // active | history
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
@@ -119,6 +119,15 @@ const IngresoActivo = ({ navigation }) => {
           return
         }
         setProfile(savedProfile)
+
+        // client identity for scoping (if profile is cliente)
+        try {
+          const raw = await AsyncStorage.getItem(CLIENT_IDENTITY_KEY)
+          setClientIdentity(raw ? JSON.parse(raw) : null)
+        } catch {
+          setClientIdentity(null)
+        }
+
         loadEntry()
         loadEntries()
       }
@@ -190,10 +199,17 @@ const IngresoActivo = ({ navigation }) => {
 
     const scoped = viewMode === 'history' ? onlyHistory : onlyActive
 
-    // For tech, force active view
+    // Per-role scoping
     if (profile === 'tecnico') return onlyActive
+
+    if (profile === 'cliente') {
+      const identity = clientIdentity
+      // Only show plates allowed for this client
+      return scoped.filter((it) => isPlateAllowed(identity, it.placa || it.plate))
+    }
+
     return scoped
-  }, [entries, entry, profile, viewMode])
+  }, [entries, entry, profile, viewMode, clientIdentity])
 
   const saveEntries = async (next) => {
     setEntries(next)

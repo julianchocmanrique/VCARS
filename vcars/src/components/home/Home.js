@@ -6,6 +6,7 @@ import {
   Text,
   ScrollView,
   BackHandler,
+  Alert,
   Animated,
   Easing,
   Image,
@@ -17,6 +18,7 @@ import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
 import { DEMO_PROFILES, seedDemoProfile } from '../../lib/vcarsDemoSeed'
+import { signOut } from '../../lib/vcarsAuth'
 
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const PROFILE_KEY = '@vcars_profile'
@@ -172,6 +174,22 @@ const Home = ({ navigation, route }) => {
     navigation.navigate('IngresoActivo')
   }
   const goPerfil = () => navigation.navigate('Login', { forceSelect: true })
+
+  const doSignOut = () => {
+    Alert.alert('Cerrar sesión', '¿Quieres salir para ingresar con otro perfil?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Salir',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut()
+          } catch {}
+          navigation.reset({ index: 0, routes: [{ name: 'Login' }] })
+        },
+      },
+    ])
+  }
   const goVehiculoDetalle = () => entry && navigation.navigate('VehiculoDetalle', { vehicle: entry })
   const goMisVehiculos = () => navigation.navigate('MisVehiculos')
 
@@ -281,10 +299,17 @@ const Home = ({ navigation, route }) => {
               </Text>
             </View>
 
-            <TouchableOpacity style={styles.profileChip} onPress={goPerfil} activeOpacity={0.85}>
-              <Icon name="person" size={16} color={COLORS.surface} />
-              <Text style={styles.profileChipText}>Perfil</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              <TouchableOpacity style={styles.profileChip} onPress={goPerfil} activeOpacity={0.85}>
+                <Icon name="person" size={16} color={COLORS.surface} />
+                <Text style={styles.profileChipText}>Perfil</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.logoutChip} onPress={doSignOut} activeOpacity={0.85}>
+                <Icon name="log-out-outline" size={16} color={COLORS.text} />
+                <Text style={styles.logoutChipText}>Salir</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -647,6 +672,24 @@ const styles = StyleSheet.create({
   },
   profileChipText: {
     color: COLORS.surface,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+
+  logoutChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  logoutChipText: {
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0.3,
