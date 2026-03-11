@@ -49,6 +49,7 @@ const Home = ({ navigation, route }) => {
   const [entry, setEntry] = React.useState(route?.params?.entry || null)
   const [profile, setProfile] = React.useState(null)
   const [entriesCount, setEntriesCount] = React.useState(0)
+  const [showDevTools, setShowDevTools] = React.useState(false)
 
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
@@ -420,19 +421,28 @@ const Home = ({ navigation, route }) => {
 
               const devCards = __DEV__
                 ? [
-                    ...DEMO_PROFILES.slice(0, 5).map((d) => ({
-                      title: d.label,
-                      subtitle: 'Cargar perfil rápido (DEV)',
-                      icon: 'sparkles',
-                      tone: 'secondary',
-                      onPress: () => seedAndReload(d.id),
-                    })),
+                    {
+                      title: showDevTools ? 'Ocultar herramientas' : 'Herramientas',
+                      subtitle: 'Opciones avanzadas (DEV)',
+                      icon: showDevTools ? 'chevron-up' : 'chevron-down',
+                      tone: 'muted',
+                      onPress: () => setShowDevTools((v) => !v),
+                    },
+                    ...(showDevTools
+                      ? DEMO_PROFILES.slice(0, 5).map((d) => ({
+                          title: d.label,
+                          subtitle: 'Cargar perfil rápido',
+                          icon: 'sparkles',
+                          tone: 'secondary',
+                          onPress: () => seedAndReload(d.id),
+                        }))
+                      : []),
                   ]
                 : []
 
-              const withDev = __DEV__ ? [...devCards, ...cards] : cards
+              const list = __DEV__ ? [...cards, ...devCards] : cards
 
-              return withDev.map((c) => (
+              return list.map((c) => (
                 <QuickCard
                   key={c.title}
                   title={c.title}
