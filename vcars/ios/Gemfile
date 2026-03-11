@@ -1,0 +1,7 @@
+# iOS dependencies pinned via Bundler for reproducible `pod install`
+# Usage:
+#   cd ios && bundle install && bundle exec pod install
+
+source 'https://rubygems.org'
+
+gem 'cocoapods', '~> 1.15'
