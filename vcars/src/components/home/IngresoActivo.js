@@ -9,11 +9,16 @@ import {
   Easing,
   Image,
 } from 'react-native'
-import { VCARS_STEP_TITLES, normalizeStepTitle, stepIndexFromTitle } from '../../lib/vcarsProcess'
+import {
+  VCARS_STEP_TITLES,
+  getStepTitle,
+  normalizeStepTitle,
+  stepIndexFromTitle,
+} from '../../lib/vcarsProcess'
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
-import { CLIENT_IDENTITY_KEY, isPlateAllowed } from '../../lib/vcarsClientIdentity'
+import { CLIENT_IDENTITY_KEY, isEntryAllowed } from '../../lib/vcarsClientIdentity'
 
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const PROFILE_KEY = '@vcars_profile'
@@ -140,7 +145,7 @@ const IngresoActivo = ({ navigation }) => {
     const base = Array.isArray(entries) ? entries : []
     const merged = (() => {
       if (!entry) return base
-      const defaultStep = VCARS_STEP_TITLES[0] || 'Pendiente'
+      const defaultStep = getStepTitle(0)
       const normalizedEntry = {
         ...entry,
         paso: normalizeStepTitle(entry.paso || defaultStep),
@@ -178,7 +183,7 @@ const IngresoActivo = ({ navigation }) => {
 
     // Normalize legacy items
     const normalized = merged.map((item) => {
-      const paso = normalizeStepTitle(item.paso || VCARS_STEP_TITLES[0])
+      const paso = normalizeStepTitle(item.paso || getStepTitle(0))
       const stepIndex =
         typeof item.stepIndex === 'number'
           ? item.stepIndex
@@ -204,8 +209,7 @@ const IngresoActivo = ({ navigation }) => {
 
     if (profile === 'cliente') {
       const identity = clientIdentity
-      // Only show plates allowed for this client
-      return scoped.filter((it) => isPlateAllowed(identity, it.placa || it.plate))
+      return scoped.filter((it) => isEntryAllowed(identity, it))
     }
 
     return scoped
@@ -612,5 +616,3 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 })
-
-

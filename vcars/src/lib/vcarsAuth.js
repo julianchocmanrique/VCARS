@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { ensureDemoWorkspace } from './vcarsDemoSeed'
 
 export const SESSION_KEY = '@vcars_session'
 export const PROFILE_KEY = '@vcars_profile'
@@ -48,6 +49,7 @@ export async function signIn({ username, password }) {
 
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session))
   await AsyncStorage.setItem(PROFILE_KEY, user.role)
+  await ensureDemoWorkspace(user.role)
 
   return { ok: true, session }
 }
@@ -63,6 +65,7 @@ export async function getSession() {
   try {
     const s = JSON.parse(raw)
     if (!s?.role) return null
+    await ensureDemoWorkspace(s.role)
     return s
   } catch {
     return null

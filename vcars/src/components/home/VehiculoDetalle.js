@@ -3,7 +3,12 @@ import { View, StyleSheet, Text, TouchableOpacity, ScrollView, Image, Animated, 
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
-import { VCARS_STEP_TITLES, allowedStepIndices, normalizeStepTitle, stepIndexFromTitle } from '../../lib/vcarsProcess'
+import {
+  VCARS_STEP_TITLES,
+  getVisibleSteps,
+  normalizeStepTitle,
+  stepIndexFromTitle,
+} from '../../lib/vcarsProcess'
 
 const COLORS = {
   bg: '#05070B',
@@ -19,8 +24,6 @@ const COLORS = {
 }
 
 const PROFILE_KEY = '@vcars_profile'
-
-const PROCESS_STEPS = VCARS_STEP_TITLES
 
 const ENTRIES_KEY = '@vcars_entries'
 
@@ -91,14 +94,17 @@ const VehiculoDetalle = ({ navigation, route }) => {
         const stepIndex =
           typeof match.stepIndex === 'number'
             ? match.stepIndex
-            : Math.max(0, PROCESS_STEPS.findIndex((step) => step === match.paso))
-        if (stepIndex >= 0 && stepIndex < PROCESS_STEPS.length) {
+            : Math.max(0, VCARS_STEP_TITLES.findIndex((step) => step === match.paso))
+        if (stepIndex >= 0 && stepIndex < VCARS_STEP_TITLES.length) {
           setCurrentStepIndex(stepIndex)
-          setCurrentStepLabel(PROCESS_STEPS[stepIndex])
+          setCurrentStepLabel(VCARS_STEP_TITLES[stepIndex])
           return
         }
       }
-      const fallbackIndex = Math.max(0, PROCESS_STEPS.findIndex((step) => step === vehicle.paso))
+      const fallbackIndex = Math.max(
+        0,
+        VCARS_STEP_TITLES.findIndex((step) => step === vehicle.paso),
+      )
       setCurrentStepIndex(fallbackIndex)
       setCurrentStepLabel(vehicle.paso || '')
     }
@@ -125,15 +131,14 @@ const VehiculoDetalle = ({ navigation, route }) => {
     }, [navigation]),
   )
 
-  const allowedIndices = allowedStepIndices(profile)
-
-  const displaySteps = allowedIndices.map((idx) => PROCESS_STEPS[idx])
+  const visibleSteps = getVisibleSteps(profile)
+  const visibleStepIndices = visibleSteps.map((item) => item.index)
   const displayCurrentIndex = (() => {
-    if (allowedIndices.includes(currentStepIndex)) {
-      return allowedIndices.indexOf(currentStepIndex)
+    if (visibleStepIndices.includes(currentStepIndex)) {
+      return visibleStepIndices.indexOf(currentStepIndex)
     }
-    const prior = allowedIndices.filter((idx) => idx <= currentStepIndex).pop()
-    return prior !== undefined ? allowedIndices.indexOf(prior) : 0
+    const prior = visibleStepIndices.filter((idx) => idx <= currentStepIndex).pop()
+    return prior !== undefined ? visibleStepIndices.indexOf(prior) : 0
   })()
 
   return (
@@ -217,18 +222,18 @@ const VehiculoDetalle = ({ navigation, route }) => {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Linea de tiempo</Text>
-          {displaySteps.map((step, index) => {
+          {visibleSteps.map((step, index) => {
             const done = index <= displayCurrentIndex
             return (
-              <View key={step} style={styles.timelineRow}>
+              <View key={step.key} style={styles.timelineRow}>
                 <View style={styles.timelineLeft}>
                   <View style={[styles.timelineDot, done && styles.timelineDotDone]} />
-                  {index < displaySteps.length - 1 && (
+                  {index < visibleSteps.length - 1 && (
                     <View style={[styles.timelineLine, done && styles.timelineLineDone]} />
                   )}
                 </View>
                 <Text style={[styles.timelineText, done && styles.timelineTextDone]}>
-                  {step}
+                  {step.title}
                 </Text>
               </View>
             )
@@ -242,7 +247,7 @@ const VehiculoDetalle = ({ navigation, route }) => {
                 return
               }
               navigation.navigate('OrdenServicio', {
-                startStep: allowedIndices[displayCurrentIndex] ?? currentStepIndex,
+                startStep: visibleSteps[displayCurrentIndex]?.index ?? currentStepIndex,
                 entryId: vehicle?.id || vehicle?.placa || null,
               })
             }}
@@ -255,14 +260,14 @@ const VehiculoDetalle = ({ navigation, route }) => {
         {profile !== 'cliente' ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Formularios</Text>
-            {displaySteps.map((step, index) => (
+            {visibleSteps.map((step, index) => (
               <TouchableOpacity
-                key={step}
+                key={step.key}
                 style={styles.formRow}
                 activeOpacity={0.85}
                 onPress={() =>
                   navigation.navigate('OrdenServicio', {
-                    startStep: allowedIndices[index],
+                    startStep: step.index,
                     entryId: vehicle?.id || vehicle?.placa || null,
                   })
                 }
@@ -275,7 +280,7 @@ const VehiculoDetalle = ({ navigation, route }) => {
                     ]}
                   />
                 </View>
-                <Text style={styles.formText}>{step}</Text>
+                <Text style={styles.formText}>{step.title}</Text>
                 <Icon name="create-outline" size={16} color={COLORS.textMuted} />
               </TouchableOpacity>
             ))}
@@ -611,4 +616,3 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 })
-

@@ -1,846 +1,850 @@
-import React from 'react'
+import React from 'react';
 import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Text,
-  ScrollView,
-  BackHandler,
   Alert,
-  Animated,
-  Easing,
+  BackHandler,
   Image,
+  ScrollView,
   StatusBar,
-  Platform,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import Icon from 'react-native-vector-icons/Ionicons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useFocusEffect } from '@react-navigation/native'
-import { DEMO_PROFILES, seedDemoProfile } from '../../lib/vcarsDemoSeed'
-import { signOut } from '../../lib/vcarsAuth'
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useFocusEffect} from '@react-navigation/native';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
+import BottomNav from './BottomNav';
+import {signOut} from '../../lib/vcarsAuth';
+import {color} from '../../theme/colors';
+import {radius, shadow, space} from '../../theme/layout';
 
-const CURRENT_ENTRY_KEY = '@vcars_current_entry'
-const PROFILE_KEY = '@vcars_profile'
-const ENTRIES_KEY = '@vcars_entries'
-
-const COLORS = {
-  bg: '#05070B',
-  surface: '#0E1117',
-  surfaceAlt: '#121826',
-  border: '#1D2433',
-  text: '#F5F7FA',
-  textMuted: '#9AA4B2',
-  blue: '#1F4D7A',
-  blueLight: '#86B9E6',
-  red: '#D43A3A',
-  gray: '#8F8F8F',
-}
+const CURRENT_ENTRY_KEY = '@vcars_current_entry';
+const PROFILE_KEY = '@vcars_profile';
+const ENTRIES_KEY = '@vcars_entries';
 
 const PROFILE_LABEL = {
   administrativo: 'Administrativo',
-  tecnico: 'Técnico',
+  tecnico: 'Tecnico',
   cliente: 'Cliente',
+};
+
+const STATUS_LABEL = {
+  active: 'Activo',
+  done: 'Finalizado',
+  cancelled: 'Cancelado',
+};
+
+function toTimestamp(value) {
+  if (!value) {
+    return 0;
+  }
+  const date = new Date(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
-const Home = ({ navigation, route }) => {
-  const insets = useSafeAreaInsets()
+function sortEntries(list) {
+  return [...list].sort((a, b) => {
+    const left = toTimestamp(a?.updatedAt || a?.fecha);
+    const right = toTimestamp(b?.updatedAt || b?.fecha);
+    return right - left;
+  });
+}
 
-  const [entry, setEntry] = React.useState(route?.params?.entry || null)
-  const [profile, setProfile] = React.useState(null)
-  const [entriesCount, setEntriesCount] = React.useState(0)
-  const [showDevTools, setShowDevTools] = React.useState(false)
+function summarizeEntries(list) {
+  const active = list.filter(
+    item => (item?.status || 'active') === 'active',
+  ).length;
+  const done = list.filter(item => item?.status === 'done').length;
+  const cancelled = list.filter(item => item?.status === 'cancelled').length;
 
-  const glow = React.useRef(new Animated.Value(0)).current
-  const scan = React.useRef(new Animated.Value(0)).current
+  return {
+    total: list.length,
+    active,
+    done,
+    cancelled,
+  };
+}
+
+function normalizeEntry(entry) {
+  if (!entry) {
+    return null;
+  }
+
+  return {
+    id: entry.id || entry.placa || entry.fecha || `${Date.now()}`,
+    placa: entry.placa || '-',
+    cliente: entry.cliente || '-',
+    telefono: entry.telefono || '-',
+    vehiculo: entry.vehiculo || 'Vehiculo',
+    empresa: entry.empresa || entry.tipoCliente || '',
+    stepIndex: typeof entry.stepIndex === 'number' ? entry.stepIndex : 0,
+    paso: entry.paso || 'Recepcion',
+    status: entry.status || 'active',
+    updatedAt: entry.updatedAt || entry.fecha || new Date().toISOString(),
+  };
+}
+
+const Home = ({navigation, route}) => {
+  const insets = useSafeAreaInsets();
+
+  const [profile, setProfile] = React.useState(null);
+  const [currentEntry, setCurrentEntry] = React.useState(
+    route?.params?.entry || null,
+  );
+  const [recentEntries, setRecentEntries] = React.useState([]);
+  const [summary, setSummary] = React.useState({
+    total: 0,
+    active: 0,
+    done: 0,
+    cancelled: 0,
+  });
+
+  const loadHomeState = React.useCallback(async () => {
+    const savedProfile = await AsyncStorage.getItem(PROFILE_KEY);
+    const role = savedProfile || 'administrativo';
+    setProfile(role);
+
+    if (route?.params?.entry) {
+      await AsyncStorage.setItem(
+        CURRENT_ENTRY_KEY,
+        JSON.stringify(route.params.entry),
+      );
+    }
+
+    const entriesRaw = await AsyncStorage.getItem(ENTRIES_KEY);
+    const entries = (() => {
+      try {
+        const parsed = JSON.parse(entriesRaw || '[]');
+        return Array.isArray(parsed)
+          ? sortEntries(parsed).map(normalizeEntry).filter(Boolean)
+          : [];
+      } catch {
+        return [];
+      }
+    })();
+
+    setSummary(summarizeEntries(entries));
+    setRecentEntries(entries.slice(0, 3));
+
+    const currentRaw = await AsyncStorage.getItem(CURRENT_ENTRY_KEY);
+    let current = route?.params?.entry
+      ? normalizeEntry(route.params.entry)
+      : null;
+
+    if (!current && currentRaw) {
+      try {
+        current = normalizeEntry(JSON.parse(currentRaw));
+      } catch {
+        current = null;
+      }
+    }
+
+    if (!current && entries.length) {
+      current = entries[0];
+      await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(current));
+    }
+
+    setCurrentEntry(current);
+  }, [route?.params?.entry]);
 
   React.useEffect(() => {
-    const glowAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, {
-          toValue: 1,
-          duration: 1600,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(glow, {
-          toValue: 0,
-          duration: 1600,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    )
-    const scanAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scan, {
-          toValue: 1,
-          duration: 2200,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(scan, {
-          toValue: 0,
-          duration: 2200,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    )
-
-    glowAnim.start()
-    scanAnim.start()
-
-    let mounted = true
-
-    const load = async () => {
-      const p = await AsyncStorage.getItem(PROFILE_KEY)
-      if (mounted) setProfile(p)
-
-      const fromRoute = route?.params?.entry
-      if (fromRoute) {
-        await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(fromRoute))
-      }
-
-      const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
-      if (savedList) {
-        try {
-          const list = JSON.parse(savedList)
-          if (Array.isArray(list)) {
-            if (mounted) setEntriesCount(list.length)
-            if (list.length > 0) {
-              const sorted = [...list].sort((a, b) => {
-                const da = a?.fecha ? new Date(a.fecha).getTime() : 0
-                const db = b?.fecha ? new Date(b.fecha).getTime() : 0
-                return db - da
-              })
-              if (mounted) setEntry(sorted[0])
-              return
-            }
-          }
-        } catch (err) {
-          // fall back
-        }
-      }
-
-      const saved = await AsyncStorage.getItem(CURRENT_ENTRY_KEY)
-      if (mounted && saved) setEntry(JSON.parse(saved))
-    }
-
-    load()
-
-    return () => {
-      glowAnim.stop()
-      scanAnim.stop()
-      mounted = false
-    }
-  }, [route?.params?.entry, glow, scan])
+    loadHomeState();
+  }, [loadHomeState]);
 
   useFocusEffect(
     React.useCallback(() => {
       const ensureLogin = async () => {
-        const p = await AsyncStorage.getItem(PROFILE_KEY)
-        if (!p) {
+        const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
+        if (!storedProfile) {
           navigation.reset({
             index: 0,
-            routes: [{ name: 'Login' }],
-          })
-        } else {
-          setProfile(p)
+            routes: [{name: 'Login'}],
+          });
+          return;
         }
-      }
-      ensureLogin()
 
-      const onBackPress = () => {
-        AsyncStorage.removeItem(CURRENT_ENTRY_KEY)
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'NuevoIngreso' }],
-        })
-        return true
-      }
+        setProfile(storedProfile);
+        loadHomeState();
+      };
 
-      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress)
-      return () => sub.remove()
-    }, [navigation]),
-  )
+      ensureLogin();
 
-  const goNuevoIngreso = () => navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
-  const goOrdenServicio = () => navigation.navigate('OrdenServicio', { entry })
+      const onBackPress = () => true;
+      const sub = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress,
+      );
+      return () => sub.remove();
+    }, [loadHomeState, navigation]),
+  );
+
+  const activeRole = profile || 'administrativo';
+
+  const goNuevoIngreso = () =>
+    navigation.navigate('NuevoIngreso', {mode: 'new', entry: null});
+
   const goProceso = () => {
-    if ((profile || 'administrativo') === 'cliente') {
-      navigation.navigate('MisVehiculos')
-      return
+    if (activeRole === 'cliente') {
+      navigation.navigate('MisVehiculos');
+      return;
     }
-    navigation.navigate('IngresoActivo')
-  }
-  const goPerfil = () => navigation.navigate('Login', { forceSelect: true })
+    navigation.navigate('IngresoActivo');
+  };
 
-  const doSignOut = () => {
-    Alert.alert('Cerrar sesión', '¿Quieres salir para ingresar con otro perfil?', [
-      { text: 'Cancelar', style: 'cancel' },
+  const goVehiculoDetalle = entry => {
+    if (!entry) {
+      return;
+    }
+    navigation.navigate('VehiculoDetalle', {vehicle: entry});
+  };
+
+  const goCambiarPerfil = () =>
+    navigation.navigate('Login', {forceSelect: true});
+
+  const handleSignOut = () => {
+    Alert.alert('Cerrar sesion', 'Se cerrara la sesion actual.', [
+      {text: 'Cancelar', style: 'cancel'},
       {
         text: 'Salir',
         style: 'destructive',
         onPress: async () => {
-          try {
-            await signOut()
-          } catch {}
-          navigation.reset({ index: 0, routes: [{ name: 'Login' }] })
+          await signOut();
+          navigation.reset({
+            index: 0,
+            routes: [{name: 'Login'}],
+          });
         },
       },
-    ])
-  }
-  const goVehiculoDetalle = () => entry && navigation.navigate('VehiculoDetalle', { vehicle: entry })
-  const goMisVehiculos = () => navigation.navigate('MisVehiculos')
+    ]);
+  };
 
-  const createDemoEntry = async () => {
-    // Back-compat: keep a simple quick seed
-    await seedDemoProfile('demo-admin')
-    const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
-    if (savedList) {
-      try {
-        const list = JSON.parse(savedList)
-        if (Array.isArray(list) && list.length) {
-          setEntriesCount(list.length)
-          setEntry(list[0])
-        }
-      } catch (err) {
-        // ignore
-      }
-    }
-  }
+  const primaryActions =
+    activeRole === 'cliente'
+      ? [
+          {
+            key: 'mis-vehiculos',
+            title: 'Mis vehiculos',
+            subtitle: 'Consultar placas asignadas',
+            icon: 'car-sport-outline',
+            onPress: () => navigation.navigate('MisVehiculos'),
+            variant: 'primary',
+          },
+          {
+            key: 'estado-actual',
+            title: 'Vehiculo activo',
+            subtitle: currentEntry ? currentEntry.placa : 'Sin ingreso activo',
+            icon: 'pulse-outline',
+            onPress: () => goVehiculoDetalle(currentEntry),
+            disabled: !currentEntry,
+          },
+        ]
+      : activeRole === 'tecnico'
+      ? [
+          {
+            key: 'proceso',
+            title: 'Proceso activo',
+            subtitle: currentEntry ? currentEntry.placa : 'Sin ingreso activo',
+            icon: 'build-outline',
+            onPress: () =>
+              currentEntry ? goVehiculoDetalle(currentEntry) : goProceso(),
+            variant: 'primary',
+          },
+          {
+            key: 'cola',
+            title: 'Ingresos activos',
+            subtitle: `${summary.active} en taller`,
+            icon: 'list-outline',
+            onPress: goProceso,
+          },
+        ]
+      : [
+          {
+            key: 'nuevo',
+            title: 'Nuevo ingreso',
+            subtitle: 'Registrar recepcion',
+            icon: 'add-circle-outline',
+            onPress: goNuevoIngreso,
+            variant: 'primary',
+          },
+          {
+            key: 'proceso',
+            title: 'Proceso activo',
+            subtitle: currentEntry ? currentEntry.placa : 'Sin ingreso activo',
+            icon: 'file-tray-full-outline',
+            onPress: () =>
+              currentEntry ? goVehiculoDetalle(currentEntry) : goProceso(),
+          },
+          {
+            key: 'historial',
+            title: 'Historial',
+            subtitle: `${summary.done} cerrados`,
+            icon: 'archive-outline',
+            onPress: goProceso,
+          },
+        ];
 
-  const seedAndReload = async (demoId) => {
-    const demo = await seedDemoProfile(demoId)
-    setProfile(demo.profile)
-    const savedList = await AsyncStorage.getItem(ENTRIES_KEY)
-    if (savedList) {
-      try {
-        const list = JSON.parse(savedList)
-        if (Array.isArray(list) && list.length) {
-          setEntriesCount(list.length)
-          setEntry(list[0])
-          await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(list[0]))
-        }
-      } catch (err) {
-        // ignore
-      }
-    }
-  }
+  const secondaryActions = [
+    {
+      key: 'logout',
+      title: 'Cerrar sesion',
+      icon: 'log-out-outline',
+      onPress: handleSignOut,
+      destructive: true,
+    },
+  ];
 
-  const recentTitle = entry
-    ? `${entry.vehiculo || 'Vehículo'} · ${entry.placa || '-'}`
-    : 'Sin ingresos registrados'
-
-  const recentSub = entry
-    ? `${entry?.cliente ? `Cliente: ${entry.cliente}` : 'Cliente: -'}  •  ${entry?.telefono ? `Tel: ${entry.telefono}` : 'Tel: -'}`
-    : 'Crea tu primer ingreso para empezar'
-
-  const topInset = insets?.top || 0
-  const androidStatusBar = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0
-  const safeTop = Math.max(topInset, androidStatusBar)
+  const topPadding = (insets?.top || 0) + space.lg;
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} translucent={false} />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={color.bg} />
 
       <View style={styles.bgOrbLeft} />
       <View style={styles.bgOrbRight} />
 
-      <View style={[styles.header, { paddingTop: safeTop + 12 }]}>
-        <View style={{ flex: 1 }}>
-          <View style={styles.brandWrap}>
-            <Animated.View
-              style={[
-                styles.brandGlow,
-                {
-                  opacity: glow.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.35, 0.95],
-                  }),
-                  transform: [
-                    {
-                      scale: glow.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.98, 1.02],
-                      }),
-                    },
-                  ],
-                },
-              ]}
+      <View style={[styles.header, {paddingTop: topPadding}]}>
+        <View style={styles.brandRow}>
+          <View style={styles.brandBadge}>
+            <Image
+              source={require('../../assets/vcars-v.png')}
+              style={styles.brandImage}
             />
-            <Animated.View
-              style={[
-                styles.brandScan,
-                {
-                  transform: [
-                    {
-                      translateX: scan.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-10, 125],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-            <View style={styles.brandRow}>
-              <Image source={require('../../assets/vcars-v.png')} style={styles.vImage} />
-              <Text style={styles.brand}>-CARS</Text>
-            </View>
+            <Text style={styles.brandText}>VCARS</Text>
           </View>
 
-          <View style={styles.headerRow2}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pageTitle}>Panel general</Text>
-              <Text style={styles.pageSubtitle}>
-                {PROFILE_LABEL[profile] ? PROFILE_LABEL[profile] : 'Sin perfil'}
-                {entriesCount ? `  •  ${entriesCount} ingresos` : ''}
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-              <TouchableOpacity style={styles.profileChip} onPress={goPerfil} activeOpacity={0.85}>
-                <Icon name="person" size={16} color={COLORS.surface} />
-                <Text style={styles.profileChipText}>Perfil</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.logoutChip} onPress={doSignOut} activeOpacity={0.85}>
-                <Icon name="log-out-outline" size={16} color={COLORS.text} />
-                <Text style={styles.logoutChipText}>Salir</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={goCambiarPerfil}
+            activeOpacity={0.9}>
+            <Icon name="person-outline" size={16} color={color.primary} />
+            <Text style={styles.profileButtonText}>
+              {PROFILE_LABEL[activeRole] || 'Sin perfil'}
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        <Text style={styles.pageTitle}>Inicio operativo</Text>
+        <Text style={styles.pageSubtitle}>
+          Gestiona ingresos, proceso actual y accesos por rol sin mezclar
+          herramientas.
+        </Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Acciones rápidas</Text>
-          <View style={styles.grid}>
-            {(() => {
-              const role = profile || 'administrativo'
+          <Text style={styles.sectionTitle}>Resumen</Text>
 
-              const cards =
-                role === 'cliente'
-                  ? [
-                      {
-                        title: 'Mis vehículos',
-                        subtitle: 'Ver historial',
-                        icon: 'car-sport',
-                        tone: 'primary',
-                        onPress: goMisVehiculos,
-                      },
-                      {
-                        title: 'Vehículo activo',
-                        subtitle: entry ? 'Ver estado' : 'Sin activo',
-                        icon: 'pulse',
-                        tone: 'secondary',
-                        onPress: goVehiculoDetalle,
-                        disabled: !entry,
-                      },
-                      {
-                        title: 'Contacto',
-                        subtitle: 'WhatsApp / soporte',
-                        icon: 'chatbubbles',
-                        tone: 'muted',
-                        onPress: () => {},
-                        disabled: true,
-                      },
-                      {
-                        title: 'Cambiar perfil',
-                        subtitle: 'Salir',
-                        icon: 'swap-horizontal',
-                        tone: 'danger',
-                        onPress: goPerfil,
-                      },
-                    ]
-                  : role === 'tecnico'
-                    ? [
-                        {
-                          title: 'Proceso activo',
-                          subtitle: entry ? 'Continuar' : 'Sin activo',
-                          icon: 'pulse',
-                          tone: 'primary',
-                          onPress: goVehiculoDetalle,
-                          disabled: !entry,
-                        },
-                        {
-                          title: 'Ingresos',
-                          subtitle: 'Ver activos',
-                          icon: 'document-text',
-                          tone: 'secondary',
-                          onPress: goProceso,
-                        },
-                        {
-                          title: 'Historial',
-                          subtitle: 'Últimos 5',
-                          icon: 'time',
-                          tone: 'muted',
-                          onPress: goProceso,
-                        },
-                        {
-                          title: 'Cambiar perfil',
-                          subtitle: 'Admin / Cliente',
-                          icon: 'swap-horizontal',
-                          tone: 'danger',
-                          onPress: goPerfil,
-                        },
-                      ]
-                    : [
-                        {
-                          title: 'Nuevo ingreso',
-                          subtitle: 'Registrar vehículo',
-                          icon: 'add',
-                          tone: 'primary',
-                          onPress: goNuevoIngreso,
-                        },
-                        {
-                          title: 'Proceso',
-                          subtitle: 'Ingreso activo',
-                          icon: 'pulse',
-                          tone: 'secondary',
-                          onPress: goProceso,
-                        },
-                        {
-                          title: 'Historial',
-                          subtitle: 'Últimos 5',
-                          icon: 'time',
-                          tone: 'muted',
-                          onPress: goProceso,
-                        },
-                        {
-                          title: 'Cambiar perfil',
-                          subtitle: 'Admin / Técnico',
-                          icon: 'swap-horizontal',
-                          tone: 'danger',
-                          onPress: goPerfil,
-                        },
-                      ]
-
-              const devCards = __DEV__
-                ? [
-                    {
-                      title: showDevTools ? 'Ocultar herramientas' : 'Herramientas',
-                      subtitle: 'Opciones avanzadas (DEV)',
-                      icon: showDevTools ? 'chevron-up' : 'chevron-down',
-                      tone: 'muted',
-                      onPress: () => setShowDevTools((v) => !v),
-                    },
-                    ...(showDevTools
-                      ? DEMO_PROFILES.slice(0, 5).map((d) => ({
-                          title: d.label,
-                          subtitle: 'Cargar perfil rápido',
-                          icon: 'sparkles',
-                          tone: 'secondary',
-                          onPress: () => seedAndReload(d.id),
-                        }))
-                      : []),
-                  ]
-                : []
-
-              const list = __DEV__ ? [...cards, ...devCards] : cards
-
-              return list.map((c) => (
-                <QuickCard
-                  key={c.title}
-                  title={c.title}
-                  subtitle={c.subtitle}
-                  icon={c.icon}
-                  tone={c.tone}
-                  onPress={c.onPress}
-                  disabled={c.disabled}
-                />
-              ))
-            })()}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reciente</Text>
-          <View style={styles.recentCard}>
-            <View style={styles.recentTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.recentTitle}>{recentTitle}</Text>
-                <Text style={styles.recentSubtitle}>{recentSub}</Text>
-              </View>
-              <View style={styles.recentBadge}>
-                <Icon name="car-sport" size={18} color={COLORS.surface} />
-              </View>
+          <View style={styles.summaryHero}>
+            <View style={styles.summaryCopy}>
+              <Text style={styles.summaryLabel}>Ingreso activo</Text>
+              <Text style={styles.summaryTitle}>
+                {currentEntry
+                  ? `${currentEntry.vehiculo} · ${currentEntry.placa}`
+                  : 'Sin ingreso activo'}
+              </Text>
+              <Text style={styles.summaryText}>
+                {currentEntry
+                  ? `${currentEntry.cliente} · ${
+                      STATUS_LABEL[currentEntry.status] || 'Activo'
+                    }`
+                  : 'Crea un ingreso o entra al proceso para continuar el flujo del taller.'}
+              </Text>
             </View>
 
             <TouchableOpacity
-              style={[styles.primaryBtn, !entry && styles.primaryBtnDisabled]}
+              style={[
+                styles.summaryAction,
+                !currentEntry &&
+                  activeRole === 'cliente' &&
+                  styles.actionDisabled,
+              ]}
               onPress={() => {
-                const role = profile || 'administrativo'
-                if (!entry) {
-                  if (role === 'cliente') return
-                  return navigation.navigate('NuevoIngreso', { mode: 'new', entry: null })
+                if (currentEntry) {
+                  goVehiculoDetalle(currentEntry);
+                  return;
                 }
 
-                if (role === 'cliente') {
-                  return navigation.navigate('VehiculoDetalle', { vehicle: entry })
+                if (activeRole === 'cliente') {
+                  return;
                 }
-
-                return navigation.navigate('NuevoIngreso', { mode: 'edit', entry })
+                goNuevoIngreso();
               }}
-              activeOpacity={0.9}
-              disabled={!entry && (profile || 'administrativo') === 'cliente'}
-            >
-              <Text style={styles.primaryBtnText}>
-                {(() => {
-                  const role = profile || 'administrativo'
-                  if (!entry) return 'Crear ingreso'
-                  if (role === 'cliente') return 'Ver estado'
-                  return 'Editar reciente'
-                })()}
+              disabled={!currentEntry && activeRole === 'cliente'}
+              activeOpacity={0.9}>
+              <Text style={styles.summaryActionText}>
+                {currentEntry ? 'Abrir ingreso' : 'Crear ingreso'}
               </Text>
-              <Icon name="arrow-forward" size={16} color={COLORS.surface} />
+              <Icon name="arrow-forward" size={16} color={color.darkText} />
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.kpiRow}>
+            <SummaryStat label="Activos" value={summary.active} />
+            <SummaryStat label="Cerrados" value={summary.done} />
+            <SummaryStat label="Total" value={summary.total} />
           </View>
         </View>
 
-        <View style={{ height: 88 }} />
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Acciones principales</Text>
+          <View style={styles.cardGrid}>
+            {primaryActions.map(action => (
+              <ActionCard
+                key={action.key}
+                title={action.title}
+                subtitle={action.subtitle}
+                icon={action.icon}
+                onPress={action.onPress}
+                variant={action.variant}
+                disabled={action.disabled}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Accesos secundarios</Text>
+
+          <View style={styles.secondaryCard}>
+            {secondaryActions.map((action, index) => (
+              <TouchableOpacity
+                key={action.key}
+                style={[
+                  styles.secondaryRow,
+                  index !== secondaryActions.length - 1 &&
+                    styles.secondaryRowBorder,
+                ]}
+                onPress={action.onPress}
+                activeOpacity={0.9}>
+                <View
+                  style={[
+                    styles.secondaryIconWrap,
+                    action.destructive && styles.secondaryIconWrapDanger,
+                  ]}>
+                  <Icon
+                    name={action.icon}
+                    size={18}
+                    color={action.destructive ? color.danger : color.primary}
+                  />
+                </View>
+
+                <View style={styles.secondaryTextWrap}>
+                  <Text
+                    style={[
+                      styles.secondaryTitle,
+                      action.destructive && styles.secondaryTitleDanger,
+                    ]}>
+                    {action.title}
+                  </Text>
+                </View>
+
+                <Icon
+                  name="chevron-forward"
+                  size={18}
+                  color={color.textMuted}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.secondaryCard}>
+            <Text style={styles.sectionMiniTitle}>Ultimos movimientos</Text>
+            {recentEntries.length ? (
+              recentEntries.map(item => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.recentRow}
+                  onPress={() => goVehiculoDetalle(item)}
+                  activeOpacity={0.9}>
+                  <View style={styles.recentIconWrap}>
+                    <Icon
+                      name="car-outline"
+                      size={16}
+                      color={color.blueLight}
+                    />
+                  </View>
+                  <View style={styles.recentTextWrap}>
+                    <Text style={styles.recentTitle}>
+                      {item.vehiculo} · {item.placa}
+                    </Text>
+                    <Text style={styles.recentSubtitle}>
+                      {item.cliente} · {item.paso || 'Recepcion'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>
+                Aun no hay movimientos recientes para mostrar.
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
-          <View style={styles.activeIconWrap}>
-            <Icon name="home" size={18} color={COLORS.surface} />
-          </View>
-          <Text style={[styles.navText, styles.navTextActive]}>INICIO</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={goNuevoIngreso} activeOpacity={0.8}>
-          <Icon name="add-circle-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.navText}>NUEVO</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={goProceso} activeOpacity={0.8}>
-          <Icon name="document-text-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.navText}>PROCESO</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="home" navigation={navigation} />
     </SafeAreaView>
-  )
-}
+  );
+};
 
-const QuickCard = ({ title, subtitle, icon, tone, onPress, disabled }) => {
-  const toneStyles =
-    tone === 'primary'
-      ? {
-          bg: COLORS.blueLight,
-          text: COLORS.surface,
-          sub: 'rgba(14,17,23,0.75)',
-          iconBg: 'rgba(14,17,23,0.16)',
-          iconColor: COLORS.surface,
-        }
-      : tone === 'secondary'
-        ? {
-            bg: COLORS.surface,
-            text: COLORS.text,
-            sub: COLORS.textMuted,
-            iconBg: COLORS.surfaceAlt,
-            iconColor: COLORS.blueLight,
-          }
-        : tone === 'danger'
-          ? {
-              bg: COLORS.surface,
-              text: COLORS.text,
-              sub: COLORS.textMuted,
-              iconBg: 'rgba(212,58,58,0.12)',
-              iconColor: COLORS.red,
-            }
-          : {
-              bg: COLORS.surfaceAlt,
-              text: COLORS.text,
-              sub: COLORS.textMuted,
-              iconBg: COLORS.surface,
-              iconColor: COLORS.blueLight,
-            }
+const SummaryStat = ({label, value}) => (
+  <View style={styles.kpiCard}>
+    <Text style={styles.kpiValue}>{value}</Text>
+    <Text style={styles.kpiLabel}>{label}</Text>
+  </View>
+);
+
+const ActionCard = ({title, subtitle, icon, onPress, variant, disabled}) => {
+  const isPrimary = variant === 'primary';
 
   return (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: toneStyles.bg }, disabled && { opacity: 0.5 }]}
+      style={[
+        styles.actionCard,
+        isPrimary && styles.actionCardPrimary,
+        disabled && styles.actionDisabled,
+      ]}
       onPress={onPress}
       activeOpacity={0.9}
-      disabled={!!disabled}
-    >
-      <View style={[styles.cardIcon, { backgroundColor: toneStyles.iconBg }]}>
-        <Icon name={icon} size={18} color={toneStyles.iconColor} />
+      disabled={!!disabled}>
+      <View
+        style={[
+          styles.actionIconWrap,
+          isPrimary && styles.actionIconWrapPrimary,
+        ]}>
+        <Icon
+          name={icon}
+          size={18}
+          color={isPrimary ? color.darkText : color.primary}
+        />
       </View>
-      <Text style={[styles.cardTitle, { color: toneStyles.text }]}>{title}</Text>
-      <Text style={[styles.cardSubtitle, { color: toneStyles.sub }]}>{subtitle}</Text>
+      <Text
+        style={[styles.actionTitle, isPrimary && styles.actionTitlePrimary]}>
+        {title}
+      </Text>
+      <Text
+        style={[
+          styles.actionSubtitle,
+          isPrimary && styles.actionSubtitlePrimary,
+        ]}>
+        {subtitle}
+      </Text>
     </TouchableOpacity>
-  )
-}
+  );
+};
 
-export default Home
+export default Home;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.bg,
+    backgroundColor: color.bg,
   },
   bgOrbLeft: {
     position: 'absolute',
     width: 260,
     height: 260,
     borderRadius: 130,
-    backgroundColor: COLORS.blue,
-    top: -80,
+    backgroundColor: color.primaryBrand,
+    opacity: 0.34,
+    top: -110,
     left: -120,
-    opacity: 0.45,
   },
   bgOrbRight: {
     position: 'absolute',
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: COLORS.blueLight,
-    top: 40,
+    backgroundColor: color.blueLight,
+    opacity: 0.16,
+    top: 10,
     right: -120,
-    opacity: 0.25,
   },
-
   header: {
-    // paddingTop is injected dynamically using safe area insets
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-  },
-  headerRow2: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-
-  brandWrap: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
-  },
-  brandGlow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: COLORS.blue,
-  },
-  brandScan: {
-    position: 'absolute',
-    top: 2,
-    bottom: 2,
-    width: 26,
-    borderRadius: 999,
-    backgroundColor: COLORS.blueLight,
-    opacity: 0.8,
-  },
-  brand: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 2,
+    paddingHorizontal: space.screen,
+    paddingBottom: space.xxl,
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: space.xxl,
   },
-  vImage: {
+  brandBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.xxl,
+    paddingVertical: space.lg,
+    borderRadius: radius.round,
+    backgroundColor: color.panel,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  brandImage: {
     width: 18,
     height: 18,
-    marginRight: 4,
+    marginRight: space.sm,
   },
-
+  brandText: {
+    color: color.text,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  profileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.xxl,
+    paddingVertical: space.lg,
+    borderRadius: radius.round,
+    backgroundColor: color.panel,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  profileButtonText: {
+    marginLeft: space.sm,
+    color: color.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   pageTitle: {
-    color: COLORS.text,
-    fontSize: 22,
+    color: color.text,
+    fontSize: 28,
     fontWeight: '900',
   },
   pageSubtitle: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    marginTop: 4,
+    marginTop: space.sm,
+    color: color.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    maxWidth: 520,
   },
-
-  profileChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: COLORS.blueLight,
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    shadowColor: COLORS.blueLight,
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 5,
-  },
-  profileChipText: {
-    color: COLORS.surface,
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-
-  logoutChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  logoutChipText: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 132,
   },
-
   section: {
-    marginTop: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: space.screen,
+    marginBottom: space.section,
   },
   sectionTitle: {
-    color: COLORS.text,
-    fontSize: 14,
+    color: color.text,
+    fontSize: 16,
     fontWeight: '900',
-    letterSpacing: 0.3,
-    marginBottom: 10,
+    marginBottom: space.xxl,
   },
-
-  grid: {
+  sectionMiniTitle: {
+    color: color.text,
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: space.lg,
+  },
+  summaryHero: {
+    backgroundColor: color.panel,
+    borderWidth: 1,
+    borderColor: color.border,
+    borderRadius: radius.hero,
+    padding: space.section,
+    ...shadow.elevated,
+  },
+  summaryCopy: {
+    marginBottom: space.xxl,
+  },
+  summaryLabel: {
+    color: color.blueLight,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  summaryTitle: {
+    marginTop: space.sm,
+    color: color.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  summaryText: {
+    marginTop: space.sm,
+    color: color.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  summaryAction: {
+    alignSelf: 'flex-start',
+    backgroundColor: color.yellow,
+    borderRadius: radius.xl,
+    minHeight: 48,
+    paddingHorizontal: space.section,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryActionText: {
+    color: color.darkText,
+    fontSize: 13,
+    fontWeight: '900',
+    marginRight: space.sm,
+  },
+  kpiRow: {
+    marginTop: space.xxl,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  kpiCard: {
+    width: '31%',
+    minHeight: 86,
+    borderRadius: radius.card,
+    backgroundColor: color.panel,
+    borderWidth: 1,
+    borderColor: color.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.lg,
+  },
+  kpiValue: {
+    color: color.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  kpiLabel: {
+    marginTop: space.xs,
+    color: color.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  cardGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
   },
-
-  card: {
-    width: '48%',
-    borderRadius: 18,
-    padding: 14,
+  actionCard: {
+    width: '48.3%',
+    minHeight: 164,
+    marginBottom: space.lg,
+    borderRadius: radius.card,
+    backgroundColor: color.panel,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: color.border,
+    padding: space.section,
   },
-  cardIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    justifyContent: 'center',
+  actionCardPrimary: {
+    backgroundColor: color.blueLight,
+    borderColor: color.blueLight,
+  },
+  actionIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.xl,
+    backgroundColor: color.panelSoft,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  cardTitle: {
-    marginTop: 12,
-    fontSize: 14,
+  actionIconWrapPrimary: {
+    backgroundColor: 'rgba(18,22,28,0.14)',
+  },
+  actionTitle: {
+    marginTop: space.xxl,
+    color: color.text,
+    fontSize: 15,
     fontWeight: '900',
   },
-  cardSubtitle: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: '700',
+  actionTitlePrimary: {
+    color: color.darkText,
   },
-
-  recentCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 22,
-    padding: 16,
+  actionSubtitle: {
+    marginTop: space.sm,
+    color: color.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  actionSubtitlePrimary: {
+    color: color.darkTextSoft,
+  },
+  secondaryCard: {
+    backgroundColor: color.panel,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: color.border,
+    borderRadius: radius.card,
+    paddingHorizontal: space.xxl,
+    paddingVertical: space.lg,
+    marginBottom: space.lg,
   },
-  recentTop: {
+  secondaryRow: {
+    minHeight: 62,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  recentBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: COLORS.blueLight,
-    justifyContent: 'center',
     alignItems: 'center',
+  },
+  secondaryRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: color.border,
+  },
+  secondaryIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.lg,
+    backgroundColor: color.panelSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryIconWrapDanger: {
+    backgroundColor: 'rgba(200,90,90,0.12)',
+  },
+  secondaryTextWrap: {
+    flex: 1,
+    marginLeft: space.lg,
+  },
+  secondaryTitle: {
+    color: color.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  secondaryTitleDanger: {
+    color: color.danger,
+  },
+  recentRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space.sm,
+  },
+  recentIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.panelSoft,
+  },
+  recentTextWrap: {
+    flex: 1,
+    marginLeft: space.lg,
   },
   recentTitle: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '900',
+    color: color.text,
+    fontSize: 13,
+    fontWeight: '800',
   },
   recentSubtitle: {
-    marginTop: 6,
-    color: COLORS.textMuted,
+    marginTop: 2,
+    color: color.textMuted,
+    fontSize: 11,
+  },
+  emptyText: {
+    color: color.textMuted,
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 18,
   },
-
-  primaryBtn: {
-    marginTop: 14,
-    backgroundColor: COLORS.blueLight,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
+  actionDisabled: {
+    opacity: 0.45,
   },
-  primaryBtnDisabled: {
-    opacity: 0.95,
+  bottomSpacer: {
+    height: 120,
   },
-  primaryBtnText: {
-    color: COLORS.surface,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  bottomNav: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 12,
-    height: 72,
-    backgroundColor: COLORS.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 12,
-  },
-  navItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  activeIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    backgroundColor: COLORS.blueLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navText: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  navTextActive: {
-    color: COLORS.text,
-  },
-})
+});

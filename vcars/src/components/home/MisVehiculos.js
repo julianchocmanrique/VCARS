@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Icon from 'react-native-vector-icons/Ionicons'
 
-import { CLIENT_IDENTITY_KEY } from '../../lib/vcarsClientIdentity'
+import { CLIENT_IDENTITY_KEY, isEntryAllowed } from '../../lib/vcarsClientIdentity'
 
 const PROFILE_KEY = '@vcars_profile'
 const ENTRIES_KEY = '@vcars_entries'
@@ -25,6 +25,7 @@ function normalizePlate(p) {
 export default function MisVehiculos({ navigation }) {
   const [plates, setPlates] = React.useState([])
   const [entries, setEntries] = React.useState([])
+  const [identityName, setIdentityName] = React.useState('')
 
   const load = React.useCallback(async () => {
     const profile = await AsyncStorage.getItem(PROFILE_KEY)
@@ -45,6 +46,7 @@ export default function MisVehiculos({ navigation }) {
       ? identity.plates.map(normalizePlate).filter(Boolean)
       : []
     setPlates(pls)
+    setIdentityName(identity?.companyName || identity?.name || '')
 
     let list = []
     try {
@@ -55,8 +57,8 @@ export default function MisVehiculos({ navigation }) {
       list = []
     }
 
-    const filtered = pls.length
-      ? list.filter((e) => pls.includes(normalizePlate(e?.placa)))
+    const filtered = identity
+      ? list.filter((e) => isEntryAllowed(identity, e))
       : []
 
     // order by updatedAt/fecha desc
@@ -90,7 +92,11 @@ export default function MisVehiculos({ navigation }) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>Mis vehículos</Text>
-        <Text style={styles.subtitle}>Solo ves vehículos asociados a tus placas.</Text>
+        <Text style={styles.subtitle}>
+          {identityName
+            ? `Solo ves vehículos asociados a ${identityName}.`
+            : 'Solo ves vehículos asociados a tu cuenta.'}
+        </Text>
       </View>
 
       {!plates.length ? (
