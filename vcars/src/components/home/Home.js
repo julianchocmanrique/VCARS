@@ -397,7 +397,7 @@ const Home = ({ navigation, route }) => {
                 ? [
                     ...DEMO_PROFILES.slice(0, 5).map((d) => ({
                       title: d.label,
-                      subtitle: 'Cargar datos de prueba',
+                      subtitle: 'Cargar perfil rápido (DEV)',
                       icon: 'sparkles',
                       tone: 'secondary',
                       onPress: () => seedAndReload(d.id),

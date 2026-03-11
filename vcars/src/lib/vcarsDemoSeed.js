@@ -60,26 +60,26 @@ function mkWizardForm(entry) {
 export const DEMO_PROFILES = [
   {
     id: 'demo-admin',
-    label: 'Demo ADMIN — Taller',
+    label: 'ADMIN — Taller',
     profile: 'administrativo',
   },
   {
     id: 'demo-tech',
-    label: 'Demo TÉCNICO — Taller',
+    label: 'TÉCNICO — Taller',
     profile: 'tecnico',
   },
   {
     id: 'demo-client-company',
-    label: 'Demo CLIENTE — Empresa (Viralco)',
+    label: 'CLIENTE — Empresa',
     profile: 'cliente',
     company: {
-      companyName: 'Viralco',
-      plates: ['VIR123', 'VIR456', 'VIR789'],
+      companyName: 'Empresa',
+      plates: ['EMP123', 'EMP456', 'EMP789'],
     },
   },
   {
     id: 'demo-client-personal',
-    label: 'Demo CLIENTE — Particular',
+    label: 'CLIENTE — Particular',
     profile: 'cliente',
     company: {
       companyName: 'Particular',
@@ -88,7 +88,7 @@ export const DEMO_PROFILES = [
   },
   {
     id: 'demo-admin-full',
-    label: 'Demo ADMIN — Full dataset',
+    label: 'ADMIN — Dataset completo',
     profile: 'administrativo',
   },
 ]

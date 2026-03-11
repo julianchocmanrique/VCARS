@@ -202,7 +202,7 @@ const Login = ({ navigation }) => {
           </View>
         ) : null}
 
-        <Text style={styles.hint}>En esta fase (MVP) las credenciales son locales para probar roles.</Text>
+        <Text style={styles.hint}>Credenciales locales temporales (roles: admin / técnico / cliente).</Text>
       </View>
     </KeyboardAvoidingView>
   )
