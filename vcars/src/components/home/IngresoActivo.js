@@ -19,6 +19,7 @@ import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
 import { CLIENT_IDENTITY_KEY, isEntryAllowed } from '../../lib/vcarsClientIdentity'
+import { listVehicles } from '../../lib/vcarsBackend'
 
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const PROFILE_KEY = '@vcars_profile'
@@ -101,15 +102,42 @@ const IngresoActivo = ({ navigation }) => {
   }, [])
 
   const loadEntries = React.useCallback(async () => {
-    const saved = await AsyncStorage.getItem(ENTRIES_KEY)
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      if (Array.isArray(parsed)) {
-        setEntries(parsed)
-        return
+    // Backend is now the source of truth
+    try {
+      const vehicles = await listVehicles({ take: 100 })
+      const mapped = vehicles.map((v) => {
+        const plate = String(v.plate || '').trim().toUpperCase()
+        const customer = v.customer || {}
+        const vehiculo = [v.brand, v.model, v.year].filter(Boolean).join(' ') || ''
+
+        // Minimal mapping (we'll later persist full process states server-side)
+        const paso = 'Recepción y orden de servicio'
+
+        return {
+          id: v.id,
+          placa: plate,
+          cliente: customer.name || 'Cliente',
+          telefono: customer.phone || '',
+          vehiculo,
+          empresa: customer.companyName || customer.name || '',
+          paso,
+          stepIndex: stepIndexFromTitle(paso),
+          status: v.status === 'DELIVERED' ? 'done' : 'active',
+          updatedAt: v.updatedAt || v.createdAt || new Date().toISOString(),
+          _backend: { vehicleId: v.id, customerId: v.customerId },
+        }
+      })
+      setEntries(mapped)
+    } catch (e) {
+      // If backend fails, fall back to local cache so the app still works
+      try {
+        const saved = await AsyncStorage.getItem(ENTRIES_KEY)
+        const parsed = saved ? JSON.parse(saved) : []
+        setEntries(Array.isArray(parsed) ? parsed : [])
+      } catch {
+        setEntries([])
       }
     }
-    setEntries([])
   }, [])
 
   useFocusEffect(
