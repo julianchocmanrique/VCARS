@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import Icon from 'react-native-vector-icons/Ionicons'
 import { useFocusEffect } from '@react-navigation/native'
 import { BackHandler } from 'react-native'
+import { createVehicleWithCustomer, createEntry } from '../../lib/vcarsBackend'
 
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const ENTRIES_KEY = '@vcars_entries'
@@ -142,34 +143,53 @@ const NuevoIngreso = ({ navigation, route }) => {
       return
     }
 
-    const id = isEdit && route?.params?.entry?.id ? route.params.entry.id : `entry-${Date.now()}`
-    const payload = {
-      id,
-      placa: placa.trim() || 'SIN PLACA',
-      cliente: cliente.trim() || 'Cliente',
-      telefono: telefono.trim(),
-      vehiculo: vehiculo.trim(),
-      recibio: recibio.trim(),
-      paso: 'Recepcion y orden de servicio',
-      fecha: new Date().toISOString(),
+    try {
+      // Create/ensure vehicle + customer in backend
+      const plate = placa.trim().toUpperCase()
+      const vehicle = await createVehicleWithCustomer({
+        plate,
+        customerName: cliente.trim(),
+        customerPhone: telefono.trim(),
+        // quick parse for now (we can refine with brand/model/year fields later)
+        model: vehiculo.trim(),
+      })
+
+      // Create workshop entry (reception)
+      await createEntry({
+        vehicleId: vehicle.id,
+        receivedBy: recibio.trim(),
+        notes: '',
+      })
+
+      // NOTE: while we migrate all screens, we keep a local cache so the current UI keeps working.
+      const id = vehicle.id
+      const payload = {
+        id,
+        placa: vehicle.plate,
+        cliente: vehicle.customer?.name || cliente.trim(),
+        telefono: vehicle.customer?.phone || telefono.trim(),
+        vehiculo: [vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' ') || vehiculo.trim(),
+        recibio: recibio.trim(),
+        paso: 'Recepción y orden de servicio',
+        fecha: new Date().toISOString(),
+      }
+
+      if (!isEdit) {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ form: {}, step: 0, completed: [] }))
+      }
+
+      await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(payload))
+      const saved = await AsyncStorage.getItem(ENTRIES_KEY)
+      const list = saved ? JSON.parse(saved) : []
+      const nextList = Array.isArray(list)
+        ? [{ ...payload }, ...list.filter((x) => x?.id !== payload.id)]
+        : [payload]
+      await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(nextList))
+
+      navigation.navigate('IngresoActivo', { entry: payload })
+    } catch (e) {
+      setErrors((prev) => ({ ...prev, general: e?.message || 'Error guardando en el servidor' }))
     }
-    if (!isEdit) {
-      await AsyncStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ form: {}, step: 0, completed: [] }),
-      )
-    }
-    await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(payload))
-    const saved = await AsyncStorage.getItem(ENTRIES_KEY)
-    const list = saved ? JSON.parse(saved) : []
-    let nextList = Array.isArray(list) ? list : []
-    if (isEdit) {
-      nextList = nextList.map((item) => (item.id === id ? { ...item, ...payload } : item))
-    } else {
-      nextList = [payload, ...nextList]
-    }
-    await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(nextList))
-    navigation.navigate('IngresoActivo', { entry: payload })
   }
 
   return (
@@ -254,6 +274,8 @@ const NuevoIngreso = ({ navigation, route }) => {
             {errors.telefono ? <Text style={styles.errorText}>{errors.telefono}</Text> : null}
           </View>
         </View>
+
+        {errors.general ? <Text style={[styles.errorText, { marginTop: 10 }]}>{errors.general}</Text> : null}
 
           <View style={styles.inputWrapFull}>
             <Text style={styles.label}>Cliente</Text>
