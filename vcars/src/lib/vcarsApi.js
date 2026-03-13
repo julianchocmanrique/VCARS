@@ -6,14 +6,28 @@ function joinUrl(base, path) {
   return `${b}/${p}`
 }
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { SESSION_KEY } from './vcarsAuth'
+
 async function apiFetch(path, { method = 'GET', headers = {}, body } = {}) {
   const url = joinUrl(API_URL, path)
+
+  // Cargar token (si existe)
+  let token = null
+  try {
+    const raw = await AsyncStorage.getItem(SESSION_KEY)
+    const s = raw ? JSON.parse(raw) : null
+    token = s?.token || null
+  } catch {
+    token = null
+  }
 
   const res = await fetch(url, {
     method,
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : null),
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
