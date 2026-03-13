@@ -39,11 +39,19 @@ async function apiFetch(path, { method = 'GET', headers = {}, body } = {}) {
   return json
 }
 
+function buildQuery(params = {}) {
+  const parts = []
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return
+    parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+  })
+  return parts.length ? `?${parts.join('&')}` : ''
+}
+
 export async function listVehicles({ take = 50, plate } = {}) {
-  const qs = new URLSearchParams()
-  if (take) qs.set('take', String(take))
-  if (plate) qs.set('plate', String(plate))
-  const json = await apiFetch(`vehicles?${qs.toString()}`)
+  // Nota: en algunos runtimes de React Native (iOS) URLSearchParams puede no estar completo.
+  const q = buildQuery({ take, plate })
+  const json = await apiFetch(`vehicles${q}`)
   return json.vehicles || []
 }
 
