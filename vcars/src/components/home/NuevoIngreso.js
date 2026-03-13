@@ -15,6 +15,8 @@ import Icon from 'react-native-vector-icons/Ionicons'
 import { useFocusEffect } from '@react-navigation/native'
 import { BackHandler } from 'react-native'
 
+import { createIngreso } from '../../lib/vcarsApi'
+
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const ENTRIES_KEY = '@vcars_entries'
 const STORAGE_KEY = '@vcars_orden_servicio'
@@ -142,9 +144,26 @@ const NuevoIngreso = ({ navigation, route }) => {
       return
     }
 
+    // MVP: conectamos este flujo al backend (vcars-api)
+    // Nota: la app todavía maneja proceso/roles en local, pero el ingreso queda creado en BD.
+    let backend = null
+    try {
+      backend = await createIngreso({
+        plate: placa.trim(),
+        customerName: cliente.trim(),
+        customerPhone: telefono.trim(),
+        vehicleModel: vehiculo.trim(),
+        receivedBy: recibio.trim(),
+      })
+    } catch (e) {
+      // Si falla el backend, dejamos el flujo local para no bloquear al usuario.
+      console.warn('No se pudo crear ingreso en backend:', e?.message || e)
+    }
+
     const id = isEdit && route?.params?.entry?.id ? route.params.entry.id : `entry-${Date.now()}`
     const payload = {
       id,
+      // Campos legacy usados por pantallas actuales
       placa: placa.trim() || 'SIN PLACA',
       cliente: cliente.trim() || 'Cliente',
       telefono: telefono.trim(),
@@ -152,13 +171,21 @@ const NuevoIngreso = ({ navigation, route }) => {
       recibio: recibio.trim(),
       paso: 'Recepcion y orden de servicio',
       fecha: new Date().toISOString(),
+
+      // Datos reales desde el backend
+      backend: backend
+        ? {
+            vehicleId: backend.vehicle?.id,
+            entryId: backend.entry?.id,
+            apiBaseUrl: 'vcars-api',
+          }
+        : null,
     }
+
     if (!isEdit) {
-      await AsyncStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ form: {}, step: 0, completed: [] }),
-      )
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ form: {}, step: 0, completed: [] }))
     }
+
     await AsyncStorage.setItem(CURRENT_ENTRY_KEY, JSON.stringify(payload))
     const saved = await AsyncStorage.getItem(ENTRIES_KEY)
     const list = saved ? JSON.parse(saved) : []
