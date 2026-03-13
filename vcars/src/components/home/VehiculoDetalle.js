@@ -3,6 +3,9 @@ import { View, StyleSheet, Text, TouchableOpacity, ScrollView, Image, Animated, 
 import Icon from 'react-native-vector-icons/Ionicons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
+
+import { getVehicleByPlate } from '../../lib/vcarsApi'
+import { apiVehicleToLegacyEntry } from '../../lib/vcarsMapper'
 import {
   VCARS_STEP_TITLES,
   getVisibleSteps,
@@ -28,8 +31,9 @@ const PROFILE_KEY = '@vcars_profile'
 const ENTRIES_KEY = '@vcars_entries'
 
 const VehiculoDetalle = ({ navigation, route }) => {
-  const vehicle = route?.params?.vehicle || {}
-  const normalizedPaso = normalizeStepTitle(vehicle.paso)
+  const initialVehicle = route?.params?.vehicle || {}
+  const [vehicle, setVehicle] = React.useState(initialVehicle)
+  const normalizedPaso = normalizeStepTitle(initialVehicle.paso)
   const [currentStepIndex, setCurrentStepIndex] = React.useState(stepIndexFromTitle(normalizedPaso))
   const [currentStepLabel, setCurrentStepLabel] = React.useState(normalizedPaso || '')
   const [profile, setProfile] = React.useState('administrativo')
@@ -80,9 +84,27 @@ const VehiculoDetalle = ({ navigation, route }) => {
 
   React.useEffect(() => {
     let mounted = true
+
     const loadProcess = async () => {
+      // 1) Perfil (local)
       const savedProfile = await AsyncStorage.getItem(PROFILE_KEY)
       if (mounted && savedProfile) setProfile(savedProfile)
+
+      // 2) Intentar refrescar data desde backend por placa
+      const plate = String(vehicle?.placa || vehicle?.plate || '').trim()
+      if (plate) {
+        try {
+          const apiVehicle = await getVehicleByPlate(plate)
+          const mapped = apiVehicleToLegacyEntry(apiVehicle)
+          if (mounted && mapped) {
+            setVehicle((prev) => ({ ...prev, ...mapped }))
+          }
+        } catch (e) {
+          console.warn('No se pudo cargar vehículo desde backend:', e?.message || e)
+        }
+      }
+
+      // 3) Paso/linea de tiempo (por ahora seguimos con lo que tiene el item en local)
       const entriesRaw = await AsyncStorage.getItem(ENTRIES_KEY)
       const entries = entriesRaw ? JSON.parse(entriesRaw) : []
       const entryId = vehicle?.id || vehicle?.placa
@@ -101,20 +123,19 @@ const VehiculoDetalle = ({ navigation, route }) => {
           return
         }
       }
-      const fallbackIndex = Math.max(
-        0,
-        VCARS_STEP_TITLES.findIndex((step) => step === vehicle.paso),
-      )
+
+      const fallbackIndex = Math.max(0, VCARS_STEP_TITLES.findIndex((step) => step === vehicle.paso))
       setCurrentStepIndex(fallbackIndex)
       setCurrentStepLabel(vehicle.paso || '')
     }
+
     loadProcess()
     const unsub = navigation.addListener('focus', loadProcess)
     return () => {
       mounted = false
       if (unsub) unsub()
     }
-  }, [navigation, vehicle.paso])
+  }, [navigation, vehicle?.placa, vehicle?.paso])
 
   useFocusEffect(
     React.useCallback(() => {

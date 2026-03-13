@@ -5,6 +5,9 @@ import Icon from 'react-native-vector-icons/Ionicons'
 
 import { CLIENT_IDENTITY_KEY, isEntryAllowed } from '../../lib/vcarsClientIdentity'
 
+import { getVehicleByPlate } from '../../lib/vcarsApi'
+import { apiVehicleToLegacyEntry } from '../../lib/vcarsMapper'
+
 const PROFILE_KEY = '@vcars_profile'
 const ENTRIES_KEY = '@vcars_entries'
 
@@ -48,6 +51,38 @@ export default function MisVehiculos({ navigation }) {
     setPlates(pls)
     setIdentityName(identity?.companyName || identity?.name || '')
 
+    // Preferimos backend: por cada placa, traemos el vehículo y lo mapeamos
+    if (pls.length) {
+      try {
+        const fetched = await Promise.all(
+          pls.map(async (p) => {
+            try {
+              const v = await getVehicleByPlate(p)
+              return apiVehicleToLegacyEntry(v)
+            } catch {
+              return null
+            }
+          }),
+        )
+
+        const list = fetched.filter(Boolean)
+        // Guardamos localmente para fallback
+        await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(list))
+
+        const filtered = identity ? list.filter((e) => isEntryAllowed(identity, e)) : []
+        filtered.sort((a, b) => {
+          const aa = String(a?.updatedAt || a?.fecha || a?.createdAt || '')
+          const bb = String(b?.updatedAt || b?.fecha || b?.createdAt || '')
+          return bb.localeCompare(aa)
+        })
+        setEntries(filtered)
+        return
+      } catch (e) {
+        console.warn('No se pudo cargar MisVehiculos desde backend:', e?.message || e)
+      }
+    }
+
+    // Fallback local
     let list = []
     try {
       const rawEntries = await AsyncStorage.getItem(ENTRIES_KEY)
@@ -57,11 +92,7 @@ export default function MisVehiculos({ navigation }) {
       list = []
     }
 
-    const filtered = identity
-      ? list.filter((e) => isEntryAllowed(identity, e))
-      : []
-
-    // order by updatedAt/fecha desc
+    const filtered = identity ? list.filter((e) => isEntryAllowed(identity, e)) : []
     filtered.sort((a, b) => {
       const aa = String(a?.updatedAt || a?.fecha || a?.createdAt || '')
       const bb = String(b?.updatedAt || b?.fecha || b?.createdAt || '')

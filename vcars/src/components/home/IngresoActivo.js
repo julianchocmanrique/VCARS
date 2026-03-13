@@ -20,6 +20,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
 import { CLIENT_IDENTITY_KEY, isEntryAllowed } from '../../lib/vcarsClientIdentity'
 
+import { listVehicles, getVehicleByPlate } from '../../lib/vcarsApi'
+import { apiVehicleToLegacyEntry } from '../../lib/vcarsMapper'
+
 const CURRENT_ENTRY_KEY = '@vcars_current_entry'
 const PROFILE_KEY = '@vcars_profile'
 const ENTRIES_KEY = '@vcars_entries'
@@ -101,13 +104,33 @@ const IngresoActivo = ({ navigation }) => {
   }, [])
 
   const loadEntries = React.useCallback(async () => {
-    const saved = await AsyncStorage.getItem(ENTRIES_KEY)
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      if (Array.isArray(parsed)) {
-        setEntries(parsed)
+    // 1) Intentar cargar desde backend
+    try {
+      const vehicles = await listVehicles({ take: 50 })
+      const legacy = vehicles
+        .map((v) => apiVehicleToLegacyEntry(v))
+        .filter(Boolean)
+
+      if (legacy.length) {
+        setEntries(legacy)
+        // mantenemos una copia local para fallback
+        await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(legacy))
         return
       }
+    } catch (e) {
+      console.warn('No se pudo cargar lista desde backend:', e?.message || e)
+    }
+
+    // 2) Fallback local
+    const saved = await AsyncStorage.getItem(ENTRIES_KEY)
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          setEntries(parsed)
+          return
+        }
+      } catch {}
     }
     setEntries([])
   }, [])
