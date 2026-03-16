@@ -51,6 +51,12 @@ const IngresoActivo = ({ navigation }) => {
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
 
+  const isAuthExpectedError = React.useCallback((error) => {
+    const status = Number(error?.status)
+    const message = String(error?.message || '').toLowerCase()
+    return status === 401 || status === 403 || message.includes('no autorizado')
+  }, [])
+
   React.useEffect(() => {
     const glowAnim = Animated.loop(
       Animated.sequence([
@@ -118,7 +124,9 @@ const IngresoActivo = ({ navigation }) => {
         return
       }
     } catch (e) {
-      console.warn('No se pudo cargar lista desde backend:', e?.message || e)
+      if (!isAuthExpectedError(e)) {
+        console.log('No se pudo cargar lista desde backend:', e?.message || e)
+      }
     }
 
     // 2) Fallback local
@@ -133,7 +141,7 @@ const IngresoActivo = ({ navigation }) => {
       } catch {}
     }
     setEntries([])
-  }, [])
+  }, [isAuthExpectedError])
 
   useFocusEffect(
     React.useCallback(() => {

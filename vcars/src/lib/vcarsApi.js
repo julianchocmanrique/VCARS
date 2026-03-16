@@ -43,11 +43,17 @@ async function apiFetch(path, { method = 'GET', headers = {}, body } = {}) {
 
   if (!res.ok) {
     const msg = json?.error || `Error HTTP ${res.status}`
-    throw new Error(msg)
+    const error = new Error(msg)
+    error.status = res.status
+    error.payload = json
+    throw error
   }
 
   if (json && json.ok === false) {
-    throw new Error(json.error || 'Error del servidor')
+    const error = new Error(json.error || 'Error del servidor')
+    error.status = res.status || 500
+    error.payload = json
+    throw error
   }
 
   return json

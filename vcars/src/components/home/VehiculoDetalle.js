@@ -40,6 +40,12 @@ const VehiculoDetalle = ({ navigation, route }) => {
   const glow = React.useRef(new Animated.Value(0)).current
   const scan = React.useRef(new Animated.Value(0)).current
 
+  const isVehicleNotFoundError = (error) => {
+    const status = Number(error?.status)
+    const message = String(error?.message || "").toLowerCase()
+    return status === 404 || (message.includes("vehicle") && message.includes("not found"))
+  }
+
   React.useEffect(() => {
     const glowAnim = Animated.loop(
       Animated.sequence([
@@ -100,7 +106,9 @@ const VehiculoDetalle = ({ navigation, route }) => {
             setVehicle((prev) => ({ ...prev, ...mapped }))
           }
         } catch (e) {
-          console.warn('No se pudo cargar vehículo desde backend:', e?.message || e)
+          if (!isVehicleNotFoundError(e)) {
+            console.log('No se pudo cargar vehículo desde backend:', e?.message || e)
+          }
         }
       }
 
